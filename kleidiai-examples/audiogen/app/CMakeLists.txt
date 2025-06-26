@@ -74,7 +74,7 @@ set(SENTENCEPIECE_LIB ${BINARY_DIR}/src/libsentencepiece.a)
 # Define source
 set(SRCS audiogen.cpp)
 
-add_executable(audiogen ${srcs})
+add_executable(audiogen ${SRCS})
 
 set(XNNPACK_ENABLE_ARM_SME2 OFF CACHE BOOL "" FORCE)
 set(TFLITE_HOST_TOOLS_DIR "${FLATBUFFERS_BIN_DIR}/_deps/flatbuffers-build" CACHE PATH "Host tools directory")
