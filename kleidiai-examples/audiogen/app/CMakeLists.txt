@@ -26,15 +26,64 @@ endif()
 if(NOT TF_SRC_PATH)
   include(FetchContent)
 
-  FetchContent_Declare( 
-    tensorflow_src
-    GIT_REPOSITORY https://github.com/tensorflow/tensorflow.git
-    GIT_TAG 84dd28bbc29d75e6a6d917eb2998e4e8ea90ec56
-  )
+  message(STATUS "Downloading TensorFlow")
 
-  FetchContent_MakeAvailable(tensorflow_src)
+  if(ENABLE_SME2_EXPERIMENTAL)
+    message(STATUS "Enabling SME2 experimental")
+    FetchContent_Declare(
+      tensorflow_src
+      GIT_REPOSITORY https://github.com/tensorflow/tensorflow.git
+      GIT_TAG 56edbb30b2a41798bb87d6cd4d9bb6cadd3b134b
+    )
 
-  set(TENSORFLOW_SOURCE_DIR ${tensorflow_src_SOURCE_DIR})
+    FetchContent_MakeAvailable(tensorflow_src)
+
+    set(SME2_FLAG ON)
+    set(TENSORFLOW_SOURCE_DIR ${tensorflow_src_SOURCE_DIR})
+    set(TENSORFLOW_LITE_SOURCE_DIR "${tensorflow_src_SOURCE_DIR}/tensorflow/lite")
+
+    FetchContent_GetProperties(tensorflow_src)
+    if(NOT tensorflow_src_POPULATED)
+      message(FATAL_ERROR "TensorFlow was not populated")
+    endif()
+
+    # Patch DownloadPThreadPool.cmake
+    file(READ "${TENSORFLOW_LITE_SOURCE_DIR}/cmake/DownloadPThreadPool.cmake" pthreadpool_content)
+    string(REPLACE
+      "https://github.com/google/pthreadpool/archive/dcc9f28589066af0dbd4555579281230abbf74dd.zip"
+      "https://github.com/google/pthreadpool/archive/c2ba5c50bb58d1397b693740cf75fad836a0d1bf.zip"
+      pthreadpool_content "${pthreadpool_content}")
+    string(REPLACE
+      "SHA256=b193fcb18abf0d5bdb989968ccd8e274ae0ce8d89b0f1a61763582fb716b259c"
+      "SHA256=516ba8d05c30e016d7fd7af6a7fc74308273883f857faf92bc9bb630ab6dba2c"
+      pthreadpool_content "${pthreadpool_content}")
+    file(WRITE "${TENSORFLOW_LITE_SOURCE_DIR}/cmake/DownloadPThreadPool.cmake" "${pthreadpool_content}")
+
+    # Patch xnnpack.cmake
+    file(READ "${TENSORFLOW_LITE_SOURCE_DIR}/tools/cmake/modules/xnnpack.cmake" xnnpack_content)
+    string(REPLACE
+      "GIT_REPOSITORY https://github.com/google/XNNPACK"
+      "GIT_REPOSITORY https://github.com/gmiodice/XNNPACK.git"
+      xnnpack_content "${xnnpack_content}")
+    string(REPLACE
+      "GIT_TAG 8b3d5687eb8e4a266731ad8a288de6c813c2959b"
+      "GIT_TAG 4ee40b90b941ce6e525c486d6cba44fa50bcffc6"
+      xnnpack_content "${xnnpack_content}")
+    file(WRITE "${TENSORFLOW_LITE_SOURCE_DIR}/tools/cmake/modules/xnnpack.cmake" "${xnnpack_content}")
+
+    message(STATUS "Applied SME2 experimental patches to TensorFlow Lite")
+  else()
+      FetchContent_Declare(
+      tensorflow_src
+      GIT_REPOSITORY https://github.com/tensorflow/tensorflow.git
+      GIT_TAG 84dd28bbc29d75e6a6d917eb2998e4e8ea90ec56
+    )
+
+    FetchContent_MakeAvailable(tensorflow_src)
+
+    set(SME2_FLAG OFF)
+    set(TENSORFLOW_SOURCE_DIR ${tensorflow_src_SOURCE_DIR})
+  endif()
 
 else()
   set(TENSORFLOW_SOURCE_DIR ${TF_SRC_PATH})
@@ -76,7 +125,7 @@ set(SRCS audiogen.cpp)
 
 add_executable(audiogen ${SRCS})
 
-set(XNNPACK_ENABLE_ARM_SME2 OFF CACHE BOOL "" FORCE)
+set(XNNPACK_ENABLE_ARM_SME2 ${SME2_FLAG} CACHE BOOL "" FORCE)
 set(TFLITE_HOST_TOOLS_DIR "${FLATBUFFERS_BIN_DIR}/_deps/flatbuffers-build" CACHE PATH "Host tools directory")
 
 # Because flatc is not available at configure time,
@@ -116,5 +165,3 @@ target_link_libraries(audiogen
 
 # Ensure dependency build order
 add_dependencies(audiogen flatc_build sentencepiece_src)
-
-
