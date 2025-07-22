@@ -23,6 +23,7 @@ To build the audiogen application, follow one the following sections depending o
 
 - [Build the audiogen app for Android™ (TARGET)](#build-the-audiogen-app-on-linux_host_or-macos_host_for-android_target)
 - [Build the audiogen app for macOS® (TARGET)](#build-the-audiogen-app-on-macos_host_for-macos_target)
+- [Build the audiogen app for Linux® (TARGET)](#build-the-audiogen-app-on-linux_host_for-linux_target)
 
 ### Build the audiogen app on Linux® (HOST) or macOS® (HOST) for Android™ (TARGET)
 
@@ -72,7 +73,18 @@ Then, build the application:
 make -j
 ```
 #### Step 4
-At this point, you are ready to push the binaries to your Android™ device and run the audiogen application. To do so, use the `adb` tool to push all necessary files into `/data/local/tmp/app`
+Since the tokenizer used in the audiogen application is based on <strong>SentencePiece</strong>, you’ll need to download the `spiece.model` file from:
+https://huggingface.co/google-t5/t5-base/tree/main
+
+```bash
+# On Linux®
+wget https://huggingface.co/google-t5/t5-base/resolve/main/spiece.model
+
+# On macOS®
+curl https://huggingface.co/google-t5/t5-base/resolve/main/spiece.model -o spiece.model.zip
+```
+
+At this point, you are ready to push the models and the audiogen binary to your Android™ device. To do so, use the `adb` tool to push all necessary files into `/data/local/tmp/app`
 
 ```bash
 adb shell mkdir -p /data/local/tmp/app
@@ -80,19 +92,6 @@ adb push audiogen /data/local/tmp/app
 adb push $LITERT_MODELS_PATH/dit_model.tflite /data/local/tmp/app
 adb push $LITERT_MODELS_PATH/autoencoder_model.tflite /data/local/tmp/app
 adb push $LITERT_MODELS_PATH/conditioners_float32.tflite /data/local/tmp/app
-```
-
-Since the tokenizer used in the audiogen application is based on <strong>SentencePiece</strong>, you’ll need to download the `spiece.model` file from:
-https://huggingface.co/google-t5/t5-base/tree/main
-and transfer it to your device.
-
-```bash
-# On Linux®
-wget https://huggingface.co/google-t5/t5-base/resolve/main/spiece.model
-adb push spiece.model /data/local/tmp/app
-
-# On macOS®
-curl https://huggingface.co/google-t5/t5-base/resolve/main/spiece.model -o spiece.model.zip
 adb push spiece.model /data/local/tmp/app
 ```
 
@@ -109,7 +108,7 @@ Then, go to `/data/local/tmp/app`
 cd /data/local/tmp/app
 ```
 
-From there, you can then run the `audiogen` application, which requires just three input arguments:
+From there, you can then run the `audiogen` application, which requires the following input arguments:
 
 - **Model Path**: The directory containing your LiteRT models and `spiece.model` files
 - **Prompt**: A text description of the desired audio (e.g., *warm arpeggios on house beats 120BPM with drums effect*)
@@ -163,7 +162,7 @@ curl https://huggingface.co/google-t5/t5-base/resolve/main/spiece.model -o $LITE
 
 At this point, you are ready to run the audiogen application.
 
-From there, you can then run the `audiogen` application, which requires just three input arguments:
+From there, you can then run the `audiogen` application, which requires the following input arguments:
 
 - **Model Path**: The directory containing your LiteRT models and `spiece.model` files
 - **Prompt**: A text description of the desired audio (e.g., *warm arpeggios on house beats 120BPM with drums effect*)
@@ -175,3 +174,76 @@ From there, you can then run the `audiogen` application, which requires just thr
 ```
 
 If everything runs successfully, the generated audio will be saved in `.wav` format (`output.wav`) in the `audiogen_app` folder. At this point, you can play it on your laptop or PC.
+
+### Build the audiogen app on Linux® (HOST) for Linux® (TARGET)
+
+#### Step 1
+Navigate to the `audiogen/app/` folder. Set the `LITERT_MODELS_PATH` environment variable to the path where your Stable Audio Open Small models exported to LiteRT are located:
+
+```bash
+export LITERT_MODELS_PATH=<path_to_your_litert_models>
+```
+
+#### Step 2
+If you haven't installed the Arm® GNU Toolchain yet, download and extract the Arm® GNU Toolchain in the `app` directory:
+
+```bash
+# On x86_64 Linux®
+wget https://developer.arm.com/-/media/Files/downloads/gnu/14.3.rel1/binrel/arm-gnu-toolchain-14.3.rel1-x86_64-aarch64-none-linux-gnu.tar.xz
+tar -xvf arm-gnu-toolchain-14.3.rel1-x86_64-aarch64-none-linux-gnu.tar.xz
+```
+
+Set the `GNU_TOOLCHAIN_PATH` environment variable to the path where you extracted the Arm® GNU Toolchain:
+
+```bash
+export GNU_TOOLCHAIN_PATH=$(pwd)/arm-gnu-toolchain-14.3.rel1-x86_64-aarch64-none-linux-gnu
+```
+> If you extracted the Arm® GNU Toolchain to a different directory, be sure to update `GNU_TOOLCHAIN_PATH` accordingly.
+
+#### Step 3
+
+Build the audiogen application. Inside the `app` directory, create the `build` folder and navigate into it:
+
+```bash
+mkdir build && cd build
+```
+
+Next, run CMake using the following command:
+
+```bash
+cmake -DCMAKE_CXX_COMPILER=$GNU_TOOLCHAIN_PATH/bin/aarch64-none-linux-gnu-g++ -DCMAKE_C_COMPILER=$GNU_TOOLCHAIN_PATH/bin/aarch64-none-linux-gnu-gcc -DCMAKE_SYSTEM_PROCESSOR=aarch64 -DCMAKE_SYSTEM_NAME=Linux ..
+```
+
+Then, build the application:
+```bash
+make -j
+```
+#### Step 4
+Since the tokenizer used in the audiogen application is based on <strong>SentencePiece</strong>, you’ll need to download the `spiece.model` file from:
+https://huggingface.co/google-t5/t5-base/tree/main.
+
+```bash
+# On Linux®
+wget https://huggingface.co/google-t5/t5-base/resolve/main/spiece.model
+```
+
+At this point, you are ready to push the models and the audiogen binary to your Linux® device. To do so, you can use the `scp` tool to push the following files to your preferred folder:
+
+- `dit_model.tflite`
+- `autoencoder_model.tflite`
+- `conditioners_float32.tflite`
+- `spiece.model`
+- `audiogen`
+
+Then, use the `ssh` tool to enter the device and run the `audiogen` application, which requires just the following input arguments:
+
+- **Model Path**: The directory containing your LiteRT models and `spiece.model` files
+- **Prompt**: A text description of the desired audio (e.g., *warm arpeggios on house beats 120BPM with drums effect*)
+- **CPU Threads**: The number of CPU threads to use (e.g., `4`)
+- **Seed**: Specifies the seed value for the random initializer. Changing the seed will produce different audio outputs
+
+```bash
+./audiogen . "warm arpeggios on house beats 120BPM with drums effect" 4
+```
+
+If everything runs successfully, the generated audio will be saved in `.wav` format (`output.wav`) in the same directory as the `audiogen` binary. At this point, you can then retrieve it using the `scp` tool from a different Terminal and play it on your laptop or PC.
