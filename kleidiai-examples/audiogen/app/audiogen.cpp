@@ -31,6 +31,7 @@
 #include <cstdint>
 #include <cstring>
 #include <fstream>
+#include <unistd.h>
 #include <iterator>
 #include <random>
 #include <string>
@@ -39,14 +40,10 @@
 
 #include <sentencepiece_processor.h>
 
-inline long time_in_ms() {
-    using namespace std::chrono;
-    auto now = time_point_cast<milliseconds>(steady_clock::now());
-    return now.time_since_epoch().count();
-}
-
-constexpr float k_audio_len_sec = 10.0f;
-constexpr size_t k_num_steps = 8;
+constexpr size_t k_seed_default = 99;
+constexpr size_t k_audio_len_sec_default = 10;
+constexpr size_t k_num_steps_default = 8;
+const std::string k_output_file_default = "output.wav";
 
 // -- Update the tensor index based on your model configuration.
 constexpr size_t k_t5_ids_in_idx = 0;
@@ -61,9 +58,6 @@ constexpr size_t k_dit_x_in_idx = 2;
 constexpr size_t k_dit_t_in_idx = 3;
 constexpr size_t k_dit_out_idx = 0;
 
-// -- Tensor size to pre-compute the sigmas
-constexpr size_t k_t_tensor_sz = k_num_steps + 1;
-
 // -- Fill sigmas params
 constexpr float k_logsnr_max = -6.0f;
 constexpr float k_sigma_min = 0.0f;
@@ -74,6 +68,31 @@ constexpr float k_sigma_max = 1.0f;
         fprintf(stderr, "Error at %s:%d\n", __FILE__, __LINE__);\
         exit(1);                                                \
     }
+
+static inline long time_in_ms() {
+    using namespace std::chrono;
+    auto now = time_point_cast<milliseconds>(steady_clock::now());
+    return now.time_since_epoch().count();
+}
+
+static void print_usage(const char *name) {
+    fprintf(stderr,
+        "Usage: %s -m <models_base_path> -p <prompt> -t <num_threads> [-s <seed> -l <audio_len>]\n\n"
+        "Options:\n"
+        "  -m <models_base_path>   Path to model files\n"
+        "  -p <prompt>             Input prompt text (e.g., warm arpeggios on house beats 120BPM with drums effect)\n"
+        "  -t <num_threads>        Number of CPU threads to use\n"
+        "  -s <seed>               (Optional) Random seed for reproducibility. Different seeds generate different audio samples (Default: %zu)\n"
+        "  -l <audio_len_sec>      (Optional) Length of generated audio (Default: %zu s)\n"
+        "  -n <num_steps>          (Optional) Number of steps (Default: %zu)\n"
+        "  -o <output_file>        (Optional) Output audio file name (Default: %s)\n"
+        "  -h                      Show this help message\n",
+        name,
+        k_seed_default,
+        k_audio_len_sec_default,
+        k_num_steps_default,
+        k_output_file_default.c_str());
+}
 
 static std::vector<int32_t> convert_prompt_to_ids(const std::string& prompt, const std::string& spiece_model_path) {
     sentencepiece::SentencePieceProcessor sp;
@@ -194,22 +213,45 @@ struct TfLiteDelegateDeleter {
 
 int main(int32_t argc, char** argv) {
 
-    if (argc != 5) {
-        printf("ERROR: Usage ./audiogen <models_base_path> <prompt> <num_threads> <seed>\n");
-        return 1;
-    }
-
     // ----- Parse the cmd line arguments
     // ----------------------------------
-    const std::string models_base_path = argv[1];
-    const std::string prompt = argv[2];
-    const size_t num_threads = std::stoull(argv[3]);
-    const size_t seed = std::stoull(argv[4]);
+    // Required arguments
+    std::string models_base_path = "";
+    std::string prompt           = "";
+    size_t num_threads           = 0;
+    // Optional arguments
+    std::string output_file      = k_output_file_default;
+    size_t seed                  = k_seed_default;
+    size_t num_steps             = k_num_steps_default;
+    float audio_len_sec          = static_cast<float>(k_audio_len_sec_default);
+
+    int opt;
+    while ((opt = getopt(argc, argv, "m:p:t:s:n:o:l:h")) != -1) {
+        switch (opt) {
+            case 'm': models_base_path = optarg; break;
+            case 'p': prompt           = optarg; break;
+            case 't': num_threads      = std::stoull(optarg); break;
+            case 'o': output_file      = optarg; break;
+            case 's': seed             = std::stoull(optarg); break;
+            case 'n': num_steps        = std::stoull(optarg); break;
+            case 'l': audio_len_sec    = static_cast<float>(std::stoull(optarg)); break;
+            case 'h':
+            default:
+                print_usage(argv[0]);
+                return EXIT_FAILURE;
+        }
+    }
+
+    // Check the mandatory arguments
+    if (models_base_path.empty() || prompt.empty() || num_threads <= 0) {
+        fprintf(stderr, "ERROR: Missing required arguments.\n\n");
+        print_usage(argv[0]);
+        return EXIT_FAILURE;
+    }
 
     std::string t5_tflite = models_base_path + "/conditioners_float32.tflite";
     std::string dit_tflite = models_base_path + "/dit_model.tflite";
     std::string autoencoder_tflite = models_base_path + "/autoencoder_model.tflite";
-    std::string output_path = "output.wav";
     std::string sentence_model_path = models_base_path + "/spiece.model";
 
     // ----- Load the models
@@ -327,7 +369,7 @@ int main(int32_t argc, char** argv) {
     TfLiteIntArray* autoencoder_out_dims = autoencoder_interpreter->tensor(autoencoder_out_id)->dims;
 
     // ----- Allocate the extra buffer to pre-compute the sigmas
-    std::vector<float> t_buffer(k_t_tensor_sz);
+    std::vector<float> t_buffer(num_steps + 1);
 
     // ----- Initialize the T and X buffers
     fill_random_norm_dist(dit_x_in_data, get_num_elems(dit_x_in_dims), seed);
@@ -350,7 +392,7 @@ int main(int32_t argc, char** argv) {
     }
 
     // Initialize the t5_time_in_data
-    memcpy(t5_time_in_data, &k_audio_len_sec, 1 * sizeof(float));
+    memcpy(t5_time_in_data, &audio_len_sec, 1 * sizeof(float));
 
     auto start_t5 = time_in_ms();
 
@@ -366,7 +408,7 @@ int main(int32_t argc, char** argv) {
 
     auto start_dit = time_in_ms();
 
-    for(size_t i = 0; i < k_num_steps; ++i) {
+    for(size_t i = 0; i < num_steps; ++i) {
         const float curr_t = t_buffer[i];
         const float next_t = t_buffer[i + 1];
         memcpy(dit_t_in_data, &curr_t, 1 * sizeof(float));
@@ -394,12 +436,12 @@ int main(int32_t argc, char** argv) {
     const float* left_ch = autoencoder_out_data;
     const float* right_ch = autoencoder_out_data + num_audio_samples;
 
-    save_as_wav(output_path.c_str(), left_ch, right_ch, num_audio_samples);
+    save_as_wav(output_file.c_str(), left_ch, right_ch, num_audio_samples);
 
     // Save the file
     auto t5_exec_time          = (end_t5 - start_t5);
     auto dit_exec_time         = (end_dit - start_dit);
-    auto dit_avg_step_time     = (dit_exec_time / static_cast<float>(k_num_steps));
+    auto dit_avg_step_time     = (dit_exec_time / static_cast<float>(num_steps));
     auto autoencoder_exec_time = (end_autoencoder - start_autoencoder);
     auto total_exec_time       = t5_exec_time + dit_exec_time + autoencoder_exec_time;
 

@@ -21,8 +21,57 @@ This guide will show you how to build the <strong>audio generation (audiogen)</s
 
 To build the audiogen application, follow one the following sections depending on your <strong>TARGET</strong> platform:
 
-- [Build the audiogen app for Android™ (TARGET)](#build-the-audiogen-app-on-linux_host_or-macos_host_for-android_target)
 - [Build the audiogen app for macOS® (TARGET)](#build-the-audiogen-app-on-macos_host_for-macos_target)
+- [Build the audiogen app for Android™ (TARGET)](#build-the-audiogen-app-on-linux_host_or-macos_host_for-android_target)
+
+### Build the audiogen app on macOS® (HOST) for macOS® (TARGET)
+
+#### Step 1
+Navigate to the `audiogen/app/` folder. Set the `LITERT_MODELS_PATH` environment variable to the path where your Stable Audio Open Small models exported to LiteRT are located:
+
+```bash
+export LITERT_MODELS_PATH=<path_to_your_litert_models>
+```
+
+#### Step 2
+Build the audiogen application. Inside the `app` directory, create the `build` folder and navigate into it:
+
+```bash
+mkdir build && cd build
+```
+
+Next, run CMake using the following command:
+
+```bash
+cmake ..
+```
+
+Then, build the application:
+```bash
+make -j
+```
+
+#### Step 3
+Since the tokenizer used in the audiogen application is based on <strong>SentencePiece</strong>, you’ll need to download the `spiece.model` file from: https://huggingface.co/google-t5/t5-base/tree/main
+and add it to your `$LITERT_MODELS_PATH`.
+
+```bash
+curl https://huggingface.co/google-t5/t5-base/resolve/main/spiece.model -o $LITERT_MODELS_PATH/spiece.model
+```
+
+At this point, you are ready to run the audiogen application.
+
+From there, you can then run the `audiogen` application, which requires just three input arguments:
+
+- **Model Path (-m)**: The directory containing your LiteRT models and `spiece.model` files
+- **Prompt (-p)**: A text description of the desired audio (e.g., *warm arpeggios on house beats 120BPM with drums effect*)
+- **CPU Threads (-t)**: The number of CPU threads to use (e.g., `4`)
+
+```bash
+./audiogen -m . -p "warm arpeggios on house beats 120BPM with drums effect" -t 4
+```
+
+If everything runs successfully, the generated audio will be saved in `.wav` format (`output.wav`) in the `audiogen_app` folder. At this point, you can play it on your laptop or PC.
 
 ### Build the audiogen app on Linux® (HOST) or macOS® (HOST) for Android™ (TARGET)
 
@@ -111,13 +160,12 @@ cd /data/local/tmp/app
 
 From there, you can then run the `audiogen` application, which requires just three input arguments:
 
-- **Model Path**: The directory containing your LiteRT models and `spiece.model` files
-- **Prompt**: A text description of the desired audio (e.g., *warm arpeggios on house beats 120BPM with drums effect*)
-- **CPU Threads**: The number of CPU threads to use (e.g., `4`)
-- **Seed**: Specifies the seed value for the random initializer. Changing the seed will produce different audio outputs
+- **Model Path (-m)**: The directory containing your LiteRT models and `spiece.model` files
+- **Prompt (-p)**: A text description of the desired audio (e.g., *warm arpeggios on house beats 120BPM with drums effect*)
+- **CPU Threads (-t)**: The number of CPU threads to use (e.g., `4`)
 
 ```bash
-./audiogen . "warm arpeggios on house beats 120BPM with drums effect" 4
+./audiogen -m . -p "warm arpeggios on house beats 120BPM with drums effect" -t 4
 ```
 
 If everything runs successfully, the generated audio will be saved in `.wav` format (`output.wav`) in the same directory as the `audiogen` binary. At this point, you can then retrieve it using the `adb` tool from a different Terminal and play it on your laptop or PC.
@@ -125,53 +173,3 @@ If everything runs successfully, the generated audio will be saved in `.wav` for
 ```bash
 adb pull data/local/tmp/output.wav
 ```
-
-### Build the audiogen app on macOS® (HOST) for macOS® (TARGET)
-
-#### Step 1
-Navigate to the `audiogen/app/` folder. Set the `LITERT_MODELS_PATH` environment variable to the path where your Stable Audio Open Small models exported to LiteRT are located:
-
-```bash
-export LITERT_MODELS_PATH=<path_to_your_litert_models>
-```
-
-#### Step 2
-Build the audiogen application. Inside the `app` directory, create the `build` folder and navigate into it:
-
-```bash
-mkdir build && cd build
-```
-
-Next, run CMake using the following command:
-
-```bash
-cmake ..
-```
-
-Then, build the application:
-```bash
-make -j
-```
-
-#### Step 3
-Since the tokenizer used in the audiogen application is based on <strong>SentencePiece</strong>, you’ll need to download the `spiece.model` file from: https://huggingface.co/google-t5/t5-base/tree/main
-and add it to your `$LITERT_MODELS_PATH`.
-
-```bash
-curl https://huggingface.co/google-t5/t5-base/resolve/main/spiece.model -o $LITERT_MODELS_PATH/spiece.model
-```
-
-At this point, you are ready to run the audiogen application.
-
-From there, you can then run the `audiogen` application, which requires just three input arguments:
-
-- **Model Path**: The directory containing your LiteRT models and `spiece.model` files
-- **Prompt**: A text description of the desired audio (e.g., *warm arpeggios on house beats 120BPM with drums effect*)
-- **CPU Threads**: The number of CPU threads to use (e.g., `4`, `8`)
-- **Seed**: Specifies the seed value for the random initializer. Changing the seed will produce different audio outputs
-
-```bash
-./audiogen $LITERT_MODELS_PATH "warm arpeggios on house beats 120BPM with drums effect" 4 99
-```
-
-If everything runs successfully, the generated audio will be saved in `.wav` format (`output.wav`) in the `audiogen_app` folder. At this point, you can play it on your laptop or PC.
