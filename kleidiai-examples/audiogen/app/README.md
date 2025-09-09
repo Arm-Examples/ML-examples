@@ -68,10 +68,10 @@ From there, you can then run the `audiogen` application, which requires just thr
 - **CPU Threads (-t)**: The number of CPU threads to use (e.g., `4`)
 
 ```bash
-./audiogen -m . -p "warm arpeggios on house beats 120BPM with drums effect" -t 4
+./audiogen -m $LITERT_MODELS_PATH -p "warm arpeggios on house beats 120BPM with drums effect" -t 4
 ```
 
-If everything runs successfully, the generated audio will be saved in `.wav` format (`output.wav`) in the `audiogen_app` folder. At this point, you can play it on your laptop or PC.
+If everything runs successfully, the generated audio will be saved in `.wav` format (`warm_arpeggios_on_house_beats_120bpm_with_drums_effect_99.wav`) in the `audiogen_app` folder. At this point, you can play it on your laptop or PC.
 
 ### Build the audiogen app on Linux® (HOST) or macOS® (HOST) for Android™ (TARGET)
 
@@ -168,8 +168,8 @@ From there, you can then run the `audiogen` application, which requires just thr
 ./audiogen -m . -p "warm arpeggios on house beats 120BPM with drums effect" -t 4
 ```
 
-If everything runs successfully, the generated audio will be saved in `.wav` format (`output.wav`) in the same directory as the `audiogen` binary. At this point, you can then retrieve it using the `adb` tool from a different Terminal and play it on your laptop or PC.
+If everything runs successfully, the generated audio will be saved in `.wav` format (`warm_arpeggios_on_house_beats_120bpm_with_drums_effect_99.wav`) in the same directory as the `audiogen` binary. At this point, you can then retrieve it using the `adb` tool from a different Terminal and play it on your laptop or PC.
 
 ```bash
-adb pull data/local/tmp/output.wav
+adb pull data/local/tmp/warm_arpeggios_on_house_beats_120bpm_with_drums_effect_99.wav
 ```

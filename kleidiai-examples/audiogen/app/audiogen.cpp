@@ -43,7 +43,6 @@
 constexpr size_t k_seed_default = 99;
 constexpr size_t k_audio_len_sec_default = 10;
 constexpr size_t k_num_steps_default = 8;
-const std::string k_output_file_default = "output.wav";
 
 // -- Update the tensor index based on your model configuration.
 constexpr size_t k_t5_ids_in_idx = 0;
@@ -85,13 +84,23 @@ static void print_usage(const char *name) {
         "  -s <seed>               (Optional) Random seed for reproducibility. Different seeds generate different audio samples (Default: %zu)\n"
         "  -l <audio_len_sec>      (Optional) Length of generated audio (Default: %zu s)\n"
         "  -n <num_steps>          (Optional) Number of steps (Default: %zu)\n"
-        "  -o <output_file>        (Optional) Output audio file name (Default: %s)\n"
+        "  -o <output_file>        (Optional) Output audio file name (Default: <prompt>_<seed>.wav)\n"
         "  -h                      Show this help message\n",
         name,
         k_seed_default,
         k_audio_len_sec_default,
-        k_num_steps_default,
-        k_output_file_default.c_str());
+        k_num_steps_default);
+}
+
+static std::string get_filename(std::string prompt, size_t seed) {
+    // Convert spaces to underscores
+    std::replace(prompt.begin(), prompt.end(), ' ', '_');
+
+    // Convert to lowercase
+    std::transform(prompt.begin(), prompt.end(), prompt.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+
+    return prompt + "_" + std::to_string(seed) + ".wav";
 }
 
 static std::vector<int32_t> convert_prompt_to_ids(const std::string& prompt, const std::string& spiece_model_path) {
@@ -220,7 +229,7 @@ int main(int32_t argc, char** argv) {
     std::string prompt           = "";
     size_t num_threads           = 0;
     // Optional arguments
-    std::string output_file      = k_output_file_default;
+    std::string output_file      = "";
     size_t seed                  = k_seed_default;
     size_t num_steps             = k_num_steps_default;
     float audio_len_sec          = static_cast<float>(k_audio_len_sec_default);
@@ -435,6 +444,11 @@ int main(int32_t argc, char** argv) {
     const size_t num_audio_samples = get_num_elems(autoencoder_out_dims) / 2;
     const float* left_ch = autoencoder_out_data;
     const float* right_ch = autoencoder_out_data + num_audio_samples;
+
+    // If output filename empty -> filename = <prompt>_<seed>.wav
+    if (output_file.empty()) {
+        output_file = get_filename(prompt, seed);
+    }
 
     save_as_wav(output_file.c_str(), left_ch, right_ch, num_audio_samples);
 
