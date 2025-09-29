@@ -1,6 +1,0 @@
-cmake==3.21.0
-future==0.18.2
-intelhex==2.3.0
-mbed-tools==7.27.0
-prettytable==2.2.0
-wheel==0.37.0
