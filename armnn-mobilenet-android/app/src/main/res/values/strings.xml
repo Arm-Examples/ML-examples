@@ -1,9 +1,0 @@
-<resources>
-    <string name="app_name">MobileNet Test</string>
-    <string name="button_select_image">Select Image</string>
-    <string name="label_classification">Classification</string>
-    <string name="label_useNNAPI">Use NNAPI</string>
-    <string name="label_confidence">Confidence</string>
-    <string name="label_executiontime">Execution Time</string>
-    <string name="label_uncertainresult">Uncertain</string>
-</resources>
