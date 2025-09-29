@@ -1,3 +1,7 @@
+> [!CAUTION]
+> Deprecated example.
+> Please note, this example is no longer actively maintained and is provided as-is.
+
 [![License](https://img.shields.io/github/license/Arm-Examples/mlek-cmsis-pack-examples?label)](https://github.com/Arm-Examples/mlek-cmsis-pack-examples/blob/main/LICENSE)
 [![AVH build and execution test](https://img.shields.io/github/actions/workflow/status/Arm-Examples/mlek-cmsis-pack-examples/AVH-FVP-CI.yml?logo=arm&logoColor=0091bd&label=AVH%20build%20and%20execution%20test)](/.github/workflows/AVH-FVP-CI.yml)
 [![Hardware build test](https://img.shields.io/github/actions/workflow/status/Arm-Examples/mlek-cmsis-pack-examples/Hardware-CI.yml?logo=arm&logoColor=0091bd&label=Hardware%20build%20test)](./.github/workflows/Hardware-CI.yml)
