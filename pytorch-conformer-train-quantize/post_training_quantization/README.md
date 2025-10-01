@@ -18,18 +18,19 @@ $ ./examples/arm/setup.sh --i-agree-to-the-contained-eula
 
 ## Torchcodec
 We use `torchaudio` for the pre-processing of the LibriSpeech dataset. Since [August 2025](https://github.com/pytorch/audio/commit/93f582ca5001132bfcdb115f476b73ae60e6ef8a), torchaudio requires torchcodec.
-You need to install the correct version of the `torchcodec` in order to be able to load audio samples with torchaudio. When you install ExecuTorch from the release/1.0 branch, you will get torchaudio 2.8.0.dev20250906 :
+You need to install `torchcodec` in order to be able to load audio samples with torchaudio. When you install ExecuTorch from the release/1.0 branch, you will get torchaudio 2.9.0 :
 ```
 $ pip freeze | grep torch
-torch==2.9.0.dev20250906
-torchaudio==2.8.0.dev20250906
-torchvision==0.24.0.dev20250906
+torch==2.9.0
+torchaudio==2.9.0
+torchvision==0.24.0
 ....
 ```
-Manually install the torchcodec package corresponding to the minor version of torchaudio. In this example, you need to install minor version dev20250906 of torchcodec.
+Manually install the torchcodec package. Empirically, we've observed that torchcodec version 0.7.0.dev20250915 works
+with torchaudio 2.9.0.
 ```
 $ pip install --pre --no-deps --index-url https://download.pytorch.org/whl/nightly/cpu \
-  "torchcodec==0.7.0.dev20250906"
+  "torchcodec==0.7.0.dev20250915"
 ```
 As per the [torchcodec documentation](https://github.com/pytorch/torchcodec?tab=readme-ov-file#installing-torchcodec), you need to ensure you have a version of `ffmpeg` smaller than 8.
 On a Mac OS, you also need to export the `DYLD_FALLBACK_LIBRARY_PATH` environment variable to the location of the torchcodec binaries.
@@ -43,6 +44,8 @@ You can now use the latest torchaudio and load audio recordings with torchcodec.
 
 The `ptq_evaluate_conformer_10M.py` script provides a way to quantize a Conformer speech recognition network, evaluate its accuracy on the LibriSpeech dataset and generate an ExecuTorch pte for the Ethos-U NPU.
 We assume you have obtained a trained checkpoint from the Training section. Run the `ptq_evaluate_10M_model.py` script to obtain a pte file that will be deployed on device in the following way:
- `$ python ptq_evaluate_conformer_10M.py --root <path to the LibriSpeech dataset> --dataset <dataset, usually test-clean> --checkpoint <path to checkpoint with trained weights> --sp-model <path to the tokenizer>`
+ ```
+ $ python ptq_evaluate_conformer_10M.py --root <path to the LibriSpeech dataset> --dataset <dataset, usually test-clean> --checkpoint <path to checkpoint with trained weights> --sp-model <path to the tokenizer>
+ ```
 
 We obtain ~8% Word Error Rate when evaluating the quantized model on the test-clean dataset.

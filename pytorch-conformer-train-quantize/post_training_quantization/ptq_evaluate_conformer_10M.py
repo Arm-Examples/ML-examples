@@ -188,21 +188,21 @@ def main():
         "--ethos-u-memory-mode",
         type=str,
         required=False,
-        default="Shared_Sram",
+        default="Dedicated_Sram_384KB",
         help="Ethos-U memory mode defined in the vela.ini file, e.g. Sram_Only, Shared_Sram, Dedicated_Sram_384KB"
     )
     parser.add_argument(
         "--ethos-u-variant",
         type=str,
         required=False,
-        default="ethos-u85-512",
+        default="ethos-u85-1024",
         help="Ethos-U variant, e.g. ethos-u85-128, ethos-u85-256"
     )
     parser.add_argument(
         "--ethos-u-system-config",
         type=str,
         required=False,
-        default="Ethos_U85_SYS_Flash_High",
+        default="Ethos_U85_SYS_DRAM_Mid",
         help="Ethos-U system configuration defined in the vela.ini file, e.g. Ethos_U85_SYS_Flash_High or Ethos_U85_SYS_DRAM_Mid"
     )
 
@@ -273,7 +273,7 @@ def main():
         torch.tensor([CHUNK_SIZE], dtype=torch.int32),
     )
     exported_program = export(model, example_inputs, strict=True)
-    graph_module = exported_program.module()
+    graph_module = exported_program.module(check_guards=False)
 
     # Get Ethos-U compile specific information
     npu_variant = args.ethos_u_variant
@@ -304,8 +304,8 @@ def main():
 
     fp32_wer = evaluate_model(model, test_loader, sp)
     int8_wer = evaluate_model(quantized_graph_module, test_loader, sp)
-    print(f"FP32 WER: {fp32_wer:.2%}")
-    print(f"INT8 WER: {int8_wer:.2%}")
+    print(f"FP32 WER PyTorch eager mode: {fp32_wer:.2%}")
+    print(f"INT8 WER PyTorch eager mode: {int8_wer:.2%}")
 
     # Create partitioner from compile spec
     partitioner = EthosUPartitioner(compile_spec)
