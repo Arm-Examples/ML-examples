@@ -6,10 +6,6 @@ Source code for machine learning tutorials and examples, see also [Arm's AI/ML d
 
 ## Projects and tutorials
 
-### CMSIS pack based examples for Corstone-300
-CMSIS project showing keyword spotting (KWS) and object detection on Corstone-300.
-* [Source code on GitHub](cmsis-pack-examples/README.md)
-
 ### Ethos-U NPU on Corstone-300
 Explore the Corstone-300 with Cortex-M55 and Ethos-U55 NPU.
 * [Source code on GitHub](ethos-u-corstone-300/README.md)

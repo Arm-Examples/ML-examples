@@ -1,8 +1,0 @@
-# Parameters:
-# instance.parameter=value       #(type, mode) default = 'def value' : description : [min..max]
-#---------------------------------------------------------------------------------------------------
-mps4_board.visualisation.disable-visualisation=1      # (bool  , init-time) default = '0'      : Enable/disable visualisation
-vis_hdlcd.disable_visualisation=1                     # (bool  , init-time) default = '0'      : Enable/disable visualisation
-mps4_board.uart0.shutdown_on_eot=1                    # (bool  , init-time) default = '0'      : Shutdown simulation when a EOT (ASCII 4) char is transmitted (useful for regression tests when semihosting is not available)
-mps4_board.subsystem.ethosu.num_macs=256              # (int   , init-time) default = '0x100'  : Number of 8x8 MACs performed per cycle (256 or 512)
-#---------------------------------------------------------------------------------------------------
