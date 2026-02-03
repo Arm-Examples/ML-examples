@@ -29,7 +29,7 @@ if(NOT TF_SRC_PATH)
   FetchContent_Declare(
     tensorflow_src
     GIT_REPOSITORY https://github.com/tensorflow/tensorflow.git
-    GIT_TAG 3c9e7b2d24bf422e86eff4cff98440ddfdd369cc
+    GIT_TAG 5baea41aa158ce6c3396726bd84fda5cd81737a0
   )
 
   FetchContent_MakeAvailable(tensorflow_src)
@@ -76,7 +76,7 @@ set(SRCS audiogen.cpp)
 
 add_executable(audiogen ${SRCS})
 
-set(XNNPACK_ENABLE_ARM_SME2 OFF CACHE BOOL "" FORCE)
+set(XNNPACK_ENABLE_ARM_SME2 ON CACHE BOOL "" FORCE)
 set(TFLITE_HOST_TOOLS_DIR "${FLATBUFFERS_BIN_DIR}/_deps/flatbuffers-build" CACHE PATH "Host tools directory")
 
 # Because flatc is not available at configure time,
