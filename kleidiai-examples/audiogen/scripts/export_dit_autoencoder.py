@@ -1,26 +1,28 @@
 #
-# SPDX-FileCopyrightText: Copyright 2025 Arm Limited and/or its affiliates <open-source-office@arm.com>
+# SPDX-FileCopyrightText: Copyright 2025-2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
 #
 # SPDX-License-Identifier: Apache-2.0
 #
 
+# Disable GPU to avoid any issues during export
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
+
 import argparse
 import json
 import logging
-import os
 
-import ai_edge_torch
+import litert_torch
 import torch
 
 from einops import rearrange
 
-from ai_edge_torch.generative.quantize import quant_recipe, quant_recipe_utils
-from ai_edge_torch.quantize import quant_config
+from litert_torch.generative.quantize import quant_recipe, quant_recipe_utils
+from litert_torch.quantize import quant_config
 from utils_load_model import load_model
 
 import stable_audio_tools
 
-os.environ["CUDA_VISIBLE_DEVICES"] = ""
 torch.manual_seed(0)
 DEVICE = torch.device("cpu")
 
@@ -157,7 +159,7 @@ def export_audiogen(args) -> None:
     # Create the dynamic weights int8 quantization config
     quant_config_audiogen_int8 = quant_config.QuantConfig(
         generative_recipe=quant_recipe.GenerativeQuantRecipe(
-            default=quant_recipe_utils.create_layer_quant_int8_dynamic(),
+            default=quant_recipe_utils.create_layer_quant_dynamic(),
         )
     )
 
@@ -178,7 +180,7 @@ def export_audiogen(args) -> None:
     dit_model.model.transformer.rotary_pos_emb.forward_from_seq_len = rotary_emb_const
 
     # Export the DiT to LiteRT format
-    edge_model = ai_edge_torch.convert(
+    edge_model = litert_torch.convert(
         dit_model, sample_args=None, sample_kwargs=dit_model_example_input, quant_config=quant_config_audiogen_int8
     )
     edge_model.export("./dit_model.tflite")
@@ -192,7 +194,7 @@ def export_audiogen(args) -> None:
     autoencoder_decoder_example_input = get_autoencoder_decoder_example_input(dtype)
 
     # Export the Encoder part of the AutoEncoder to LiteRT format
-    edge_model = ai_edge_torch.convert(
+    edge_model = litert_torch.convert(
         autoencoder_decoder,
         autoencoder_decoder_example_input,
     )
@@ -209,7 +211,7 @@ def export_audiogen(args) -> None:
     autoencoder_encoder_example_input = get_autoencoder_encoder_example_input(dtype)
 
     # Export the AutoEncoder to LiteRT format
-    edge_model = ai_edge_torch.convert(
+    edge_model = litert_torch.convert(
         autoencoder_encoder,
         autoencoder_encoder_example_input,
     )
