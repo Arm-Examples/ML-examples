@@ -34,21 +34,15 @@ export LITERT_MODELS_PATH=<path_to_your_litert_models>
 ```
 
 #### Step 2
-Build the audiogen application. Inside the `app` directory, create the `build` folder and navigate into it:
+Build the audiogen application from the `app` directory using CMake:
 
 ```bash
-mkdir build && cd build
-```
-
-Next, run CMake using the following command:
-
-```bash
-cmake ..
+CMAKE_BUILD_PARALLEL_LEVEL=4 cmake -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -S . -B build
 ```
 
 Then, build the application:
 ```bash
-make -j
+cmake --build build --parallel 4
 ```
 
 #### Step 3
@@ -104,21 +98,15 @@ export NDK_PATH=$(pwd)/android-ndk-r27c
 
 #### Step 3
 
-Build the audiogen application. Inside the `app` directory, create the `build` folder and navigate into it:
+Build the audiogen application from the `app` directory using CMake:
 
 ```bash
-mkdir build && cd build
-```
-
-Next, run CMake using the following command:
-
-```bash
-cmake -DCMAKE_TOOLCHAIN_FILE=$NDK_PATH/build/cmake/android.toolchain.cmake -DANDROID_ABI=arm64-v8a ..
+CMAKE_BUILD_PARALLEL_LEVEL=4 cmake -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_TOOLCHAIN_FILE="$NDK_PATH/build/cmake/android.toolchain.cmake" -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-24 -S . -B build
 ```
 
 Then, build the application:
 ```bash
-make -j
+cmake --build build -j
 ```
 #### Step 4
 At this point, you are ready to push the binaries to your Android™ device and run the audiogen application. To do so, use the `adb` tool to push all necessary files into `/data/local/tmp/app`

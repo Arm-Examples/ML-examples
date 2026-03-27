@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright 2025 Arm Limited and/or its
+ * SPDX-FileCopyrightText: Copyright 2025-2026 Arm Limited and/or its
  * affiliates <open-source-office@arm.com>
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -16,13 +16,13 @@
  * limitations under the License.
  */
 
-// LiteRT header files
-#include "tensorflow/lite/c/common.h"
-#include "tensorflow/lite/delegates/xnnpack/xnnpack_delegate.h"
-#include "tensorflow/lite/interpreter.h"
-#include "tensorflow/lite/kernels/register.h"
-#include "tensorflow/lite/model.h"
-#include "tensorflow/lite/tools/gen_op_registration.h"
+#include "litert/cc/litert_compiled_model.h"
+#include "litert/cc/litert_environment.h"
+#include "litert/cc/litert_layout.h"
+#include "litert/cc/litert_options.h"
+#include "litert/cc/litert_ranked_tensor_type.h"
+#include "litert/cc/litert_tensor_buffer.h"
+#include "tflite/delegates/xnnpack/xnnpack_delegate.h"
 
 #include <algorithm>
 #include <cassert>
@@ -35,7 +35,9 @@
 #include <iterator>
 #include <random>
 #include <string>
+#include <type_traits>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include <sentencepiece_processor.h>
@@ -65,6 +67,15 @@ constexpr size_t k_dit_out_idx = 0;
 constexpr float k_logsnr_max = -6.0f;
 constexpr float k_sigma_min = 0.0f;
 constexpr float k_sigma_max = 1.0f;
+
+// -- XNNPack Flags base
+constexpr uint32_t k_xnnpack_flags_base =
+    TFLITE_XNNPACK_DELEGATE_FLAG_QS8 |
+    TFLITE_XNNPACK_DELEGATE_FLAG_QU8 |
+    TFLITE_XNNPACK_DELEGATE_FLAG_DYNAMIC_FULLY_CONNECTED |
+    TFLITE_XNNPACK_DELEGATE_FLAG_VARIABLE_OPERATORS |
+    TFLITE_XNNPACK_DELEGATE_FLAG_ENABLE_LATEST_OPERATORS |
+    TFLITE_XNNPACK_DELEGATE_FLAG_ENABLE_SUBGRAPH_RESHAPING;
 
 #define AUDIOGEN_CHECK(x)                                 \
     if (!(x)) {                                                 \
@@ -127,18 +138,27 @@ static std::vector<int32_t> convert_prompt_to_ids(const std::string& prompt, con
     return ids;
 }
 
-struct TfLiteDelegateDeleter {
-    void operator()(TfLiteDelegate* delegate) const {
-        TfLiteXNNPackDelegateDelete(delegate);
+template <typename T>
+static T get_litert_value(litert::Expected<T>&& value) {
+    AUDIOGEN_CHECK(value);
+    if constexpr (std::is_reference_v<T>) {
+        return *value;
+    } else {
+        return std::move(*value);
     }
-};
+}
 
-static size_t get_num_elems(const TfLiteIntArray* dims) {
-    size_t x = 1;
-    for (size_t i = 0; i < dims->size; ++i) {
-        x *= dims->data[i];
-    }
-    return x;
+static size_t get_num_elems(const litert::RankedTensorType& type) {
+    return get_litert_value(type.Layout().NumElements());
+}
+
+static litert::Options create_cpu_options(size_t num_threads, uint32_t xnnpack_flags) {
+    auto options = get_litert_value(litert::Options::Create());
+    AUDIOGEN_CHECK(options.SetHardwareAccelerators(litert::HwAccelerators::kCpu));
+    auto& cpu_options = get_litert_value(options.GetCpuOptions());
+    AUDIOGEN_CHECK(cpu_options.SetNumThreads(static_cast<int>(num_threads)));
+    AUDIOGEN_CHECK(cpu_options.SetXNNPackFlags(xnnpack_flags));
+    return options;
 }
 
 static void read_wav(const std::string& path, std::vector<float>& left_ch, std::vector<float>& right_ch) {
@@ -253,7 +273,7 @@ static void prepare_encoder_input(const std::vector<float>& left_ch, const std::
     }
 }
 
-static void encode_audio(const std::string& audio_input_path, const std::string& encoder_model_path, std::vector<float>& encoded_audio, size_t num_threads) {
+static void encode_audio(const std::string& audio_input_path, const std::string& encoder_model_path, std::vector<float>& encoded_audio, size_t num_threads, litert::Environment& env) {
 
     std::vector<float> packed;
     std::vector<float> left_ch_input;
@@ -263,53 +283,23 @@ static void encode_audio(const std::string& audio_input_path, const std::string&
     read_wav(audio_input_path, left_ch_input, right_ch_input);
     fprintf(stderr, "Using %s as an audio input file...\n", audio_input_path.c_str());
 
-    // Create the XNNPACK delegate options
-    TfLiteXNNPackDelegateOptions xnnpack_options = TfLiteXNNPackDelegateOptionsDefault();
-    xnnpack_options.num_threads = num_threads;
+    auto encoder_options = get_litert_value(litert::Options::Create());
+    AUDIOGEN_CHECK(encoder_options.SetHardwareAccelerators(litert::HwAccelerators::kCpu));
+    auto& encoder_cpu_options = get_litert_value(encoder_options.GetCpuOptions());
+    AUDIOGEN_CHECK(encoder_cpu_options.SetNumThreads(static_cast<int>(num_threads)));
+    AUDIOGEN_CHECK(encoder_cpu_options.SetXNNPackFlags(k_xnnpack_flags_base | TFLITE_XNNPACK_DELEGATE_FLAG_FORCE_FP16));
 
-    xnnpack_options.flags |= TFLITE_XNNPACK_DELEGATE_FLAG_QS8;
-    xnnpack_options.flags |= TFLITE_XNNPACK_DELEGATE_FLAG_QU8;
-    xnnpack_options.flags |= TFLITE_XNNPACK_DELEGATE_FLAG_DYNAMIC_FULLY_CONNECTED;
-    xnnpack_options.flags |= TFLITE_XNNPACK_DELEGATE_FLAG_ENABLE_SUBGRAPH_RESHAPING;
-    xnnpack_options.flags |= TFLITE_XNNPACK_DELEGATE_FLAG_ENABLE_LATEST_OPERATORS;
-    xnnpack_options.flags |= TFLITE_XNNPACK_DELEGATE_FLAG_VARIABLE_OPERATORS;
-    xnnpack_options.flags |= TFLITE_XNNPACK_DELEGATE_FLAG_FORCE_FP16;
-    std::unique_ptr<TfLiteDelegate, TfLiteDelegateDeleter> xnnpack_delegate_fp16(TfLiteXNNPackDelegateCreate(&xnnpack_options));
+    auto autoencoder_encoder_model = get_litert_value(litert::CompiledModel::Create(env, encoder_model_path, encoder_options));
 
-    // Allocate the encoder in case of an input file
-    std::unique_ptr<tflite::FlatBufferModel> autoencoder_encoder_model = tflite::FlatBufferModel::BuildFromFile(encoder_model_path.c_str());
-    AUDIOGEN_CHECK(autoencoder_encoder_model != nullptr);
+    auto encoder_inputs = get_litert_value(autoencoder_encoder_model.CreateInputBuffers());
+    auto encoder_outputs = get_litert_value(autoencoder_encoder_model.CreateOutputBuffers());
+    AUDIOGEN_CHECK(encoder_inputs.size() >= 1);
+    AUDIOGEN_CHECK(encoder_outputs.size() >= 1);
 
-    // Build the encoder interperter
-    tflite::ops::builtin::BuiltinOpResolver resolver;
-    tflite::InterpreterBuilder autoencoder_encoder_builder(*autoencoder_encoder_model, resolver);
+    auto encoder_in_type = get_litert_value(autoencoder_encoder_model.GetInputTensorType(0, 0));
+    auto encoder_out_type = get_litert_value(autoencoder_encoder_model.GetOutputTensorType(0, 0));
 
-    std::unique_ptr<tflite::Interpreter> autoencoder_encoder_interpreter = std::make_unique<tflite::Interpreter>();
-    autoencoder_encoder_builder(&autoencoder_encoder_interpreter);
-    AUDIOGEN_CHECK(autoencoder_encoder_interpreter != nullptr);
-
-    // Add the delegate to the interpreter
-    if (autoencoder_encoder_interpreter->ModifyGraphWithDelegate(xnnpack_delegate_fp16.get()) != kTfLiteOk) {
-        AUDIOGEN_CHECK(false && "Failed to apply XNNPACK delegate");
-    }
-
-    // Allocate tensors
-    AUDIOGEN_CHECK(autoencoder_encoder_interpreter->AllocateTensors() == kTfLiteOk);
-
-    // Get the input & output tensors dimensions
-    const size_t autoencoder_encoder_in_id = autoencoder_encoder_interpreter->inputs()[0];
-    const size_t autoencoder_encoder_out_id = autoencoder_encoder_interpreter->outputs()[0];
-
-    // Get the tensors pointers
-    float* autoencoder_encoder_in_data = autoencoder_encoder_interpreter->typed_tensor<float>(autoencoder_encoder_in_id);
-    float* autoencoder_encoder_out_data = autoencoder_encoder_interpreter->typed_tensor<float>(autoencoder_encoder_out_id);
-
-    // Get tensor shapes
-    TfLiteIntArray* autoencoder_encoder_in_dims = autoencoder_encoder_interpreter->tensor(autoencoder_encoder_in_id)->dims;
-    TfLiteIntArray* autoencoder_encoder_out_dims = autoencoder_encoder_interpreter->tensor(autoencoder_encoder_out_id)->dims;
-
-    // Get the input model size
-    const size_t audio_input_dim0 = get_num_elems(autoencoder_encoder_in_dims);
+    const size_t audio_input_dim0 = get_num_elems(encoder_in_type);
 
     // Divided by 2 because we have two channels
     AUDIOGEN_CHECK(left_ch_input.size() <= audio_input_dim0 / 2);
@@ -320,17 +310,27 @@ static void encode_audio(const std::string& audio_input_path, const std::string&
     right_ch_input.resize(audio_input_dim0 / 2, 0);
 
     // Pack the data
-    prepare_encoder_input(left_ch_input, right_ch_input, autoencoder_encoder_in_data, audio_input_dim0);
+    {
+        auto encoder_in_ptr = get_litert_value(encoder_inputs[0].Lock(litert::TensorBuffer::LockMode::kWrite));
+        auto* autoencoder_encoder_in_data = static_cast<float*>(encoder_in_ptr);
+        prepare_encoder_input(left_ch_input, right_ch_input, autoencoder_encoder_in_data, audio_input_dim0);
+        AUDIOGEN_CHECK(encoder_inputs[0].Unlock());
+    }
 
     // Run the encoder
     auto start_encoder = time_in_ms();
-    AUDIOGEN_CHECK(autoencoder_encoder_interpreter->Invoke() == kTfLiteOk);
+    AUDIOGEN_CHECK(autoencoder_encoder_model.Run(encoder_inputs, encoder_outputs));
     auto end_encoder = time_in_ms();
 
     // Copy the output to the output buffer
-    const size_t encoder_output_num_elems = get_num_elems(autoencoder_encoder_out_dims);
-    encoded_audio.resize(encoder_output_num_elems);
-    memcpy(encoded_audio.data(), autoencoder_encoder_out_data, encoder_output_num_elems * sizeof(float));
+    const size_t encoder_output_num_elems = get_num_elems(encoder_out_type);
+    {
+        auto encoder_out_ptr = get_litert_value(encoder_outputs[0].Lock(litert::TensorBuffer::LockMode::kRead));
+        auto* autoencoder_encoder_out_data = static_cast<float*>(encoder_out_ptr);
+        encoded_audio.resize(encoder_output_num_elems);
+        memcpy(encoded_audio.data(), autoencoder_encoder_out_data, encoder_output_num_elems * sizeof(float));
+        AUDIOGEN_CHECK(encoder_outputs[0].Unlock());
+    }
 
     auto encoder_exec_time = (end_encoder - start_encoder);
     fprintf(stderr, "Encoder time: %ld ms\n", encoder_exec_time);
@@ -474,139 +474,93 @@ int main(int32_t argc, char** argv) {
     std::string autoencoder_encoder_tflite = models_base_path + "/autoencoder_encoder_model.tflite";
     std::string sentence_model_path = models_base_path + "/spiece.model";
 
+    auto env = get_litert_value(litert::Environment::Create({}));
+
     // If there is input audio, run the encoder model and release it, to avoid overloading memory
     std::vector<float> encoded_audio;
     if(!audio_input_path.empty()) {
-       encode_audio(audio_input_path, autoencoder_encoder_tflite, encoded_audio, num_threads);
+        encode_audio(audio_input_path, autoencoder_encoder_tflite, encoded_audio, num_threads, env);
     }
 
-    // ----- Load the models
+    // ----- Compile LiteRT models
     // ----------------------------------
-    std::unique_ptr<tflite::FlatBufferModel> t5_model = tflite::FlatBufferModel::BuildFromFile(t5_tflite.c_str());
-    AUDIOGEN_CHECK(t5_model != nullptr);
+    auto t5_options = create_cpu_options(num_threads, k_xnnpack_flags_base);
+    auto dit_options = create_cpu_options(num_threads, k_xnnpack_flags_base);
+    auto autoencoder_options = create_cpu_options(num_threads, k_xnnpack_flags_base | TFLITE_XNNPACK_DELEGATE_FLAG_FORCE_FP16);
 
-    std::unique_ptr<tflite::FlatBufferModel> dit_model = tflite::FlatBufferModel::BuildFromFile(dit_tflite.c_str());
-    AUDIOGEN_CHECK(dit_model != nullptr);
+    auto t5_model = get_litert_value(litert::CompiledModel::Create(env, t5_tflite, t5_options));
+    auto dit_model = get_litert_value(litert::CompiledModel::Create(env, dit_tflite, dit_options));
+    auto autoencoder_model = get_litert_value(litert::CompiledModel::Create(env, autoencoder_tflite, autoencoder_options));
 
-    std::unique_ptr<tflite::FlatBufferModel> autoencoder_model = tflite::FlatBufferModel::BuildFromFile(autoencoder_tflite.c_str());
-    AUDIOGEN_CHECK(autoencoder_model != nullptr);
+    auto t5_inputs = get_litert_value(t5_model.CreateInputBuffers());
+    auto t5_outputs = get_litert_value(t5_model.CreateOutputBuffers());
+    auto dit_inputs = get_litert_value(dit_model.CreateInputBuffers());
+    auto dit_outputs = get_litert_value(dit_model.CreateOutputBuffers());
+    auto autoencoder_inputs = get_litert_value(autoencoder_model.CreateInputBuffers());
+    auto autoencoder_outputs = get_litert_value(autoencoder_model.CreateOutputBuffers());
 
-    // ----- Build the interpreters
-    // ----------------------------------
-    tflite::ops::builtin::BuiltinOpResolver resolver;
+    AUDIOGEN_CHECK(t5_inputs.size() > k_t5_audio_len_in_idx);
+    AUDIOGEN_CHECK(t5_outputs.size() > k_t5_globalcond_out_idx);
+    AUDIOGEN_CHECK(dit_inputs.size() > k_dit_x_in_idx);
+    AUDIOGEN_CHECK(dit_outputs.size() > k_dit_out_idx);
+    AUDIOGEN_CHECK(autoencoder_inputs.size() >= 1);
+    AUDIOGEN_CHECK(autoencoder_outputs.size() >= 1);
 
-    tflite::InterpreterBuilder t5_builder(*t5_model, resolver);
-    tflite::InterpreterBuilder dit_builder(*dit_model, resolver);
-    tflite::InterpreterBuilder autoencoder_builder(*autoencoder_model, resolver);
+    // ----- Query tensor sizes
+    auto t5_ids_in_type = get_litert_value(t5_model.GetInputTensorType(0, k_t5_ids_in_idx));
+    auto t5_attnmask_in_type = get_litert_value(t5_model.GetInputTensorType(0, k_t5_attnmask_in_idx));
+    auto t5_time_in_type = get_litert_value(t5_model.GetInputTensorType(0, k_t5_audio_len_in_idx));
+    auto t5_crossattn_out_type = get_litert_value(t5_model.GetOutputTensorType(0, k_t5_crossattn_out_idx));
+    auto t5_globalcond_out_type = get_litert_value(t5_model.GetOutputTensorType(0, k_t5_globalcond_out_idx));
 
-    std::unique_ptr<tflite::Interpreter> t5_interpreter = std::make_unique<tflite::Interpreter>();
-    t5_builder(&t5_interpreter);
-    AUDIOGEN_CHECK(t5_interpreter != nullptr);
+    auto dit_x_in_type = get_litert_value(dit_model.GetInputTensorType(0, k_dit_x_in_idx));
+    auto dit_t_in_type = get_litert_value(dit_model.GetInputTensorType(0, k_dit_t_in_idx));
+    auto dit_crossattn_in_type = get_litert_value(dit_model.GetInputTensorType(0, k_dit_crossattn_in_idx));
+    auto dit_globalcond_in_type = get_litert_value(dit_model.GetInputTensorType(0, k_dit_globalcond_in_idx));
+    auto dit_out_type = get_litert_value(dit_model.GetOutputTensorType(0, k_dit_out_idx));
 
-    std::unique_ptr<tflite::Interpreter> dit_interpreter = std::make_unique<tflite::Interpreter>();
-    dit_builder(&dit_interpreter);
-    AUDIOGEN_CHECK(dit_interpreter != nullptr);
+    auto autoencoder_in_type = get_litert_value(autoencoder_model.GetInputTensorType(0, 0));
+    auto autoencoder_out_type = get_litert_value(autoencoder_model.GetOutputTensorType(0, 0));
 
-    std::unique_ptr<tflite::Interpreter> autoencoder_interpreter = std::make_unique<tflite::Interpreter>();
-    autoencoder_builder(&autoencoder_interpreter);
-    AUDIOGEN_CHECK(autoencoder_interpreter != nullptr);
+    const size_t t5_ids_num_elems = get_num_elems(t5_ids_in_type);
+    const size_t t5_attnmask_num_elems = get_num_elems(t5_attnmask_in_type);
+    const size_t t5_time_num_elems = get_num_elems(t5_time_in_type);
+    const size_t t5_crossattn_num_elems = get_num_elems(t5_crossattn_out_type);
+    const size_t t5_globalcond_num_elems = get_num_elems(t5_globalcond_out_type);
 
-    // Create the XNNPACK delegate options
-    TfLiteXNNPackDelegateOptions xnnpack_options = TfLiteXNNPackDelegateOptionsDefault();
-    xnnpack_options.num_threads = num_threads;
+    const size_t dit_x_num_elems = get_num_elems(dit_x_in_type);
+    const size_t dit_t_num_elems = get_num_elems(dit_t_in_type);
+    const size_t dit_crossattn_num_elems = get_num_elems(dit_crossattn_in_type);
+    const size_t dit_globalcond_num_elems = get_num_elems(dit_globalcond_in_type);
+    const size_t dit_out_num_elems = get_num_elems(dit_out_type);
+    const size_t autoencoder_in_num_elems = get_num_elems(autoencoder_in_type);
+    const size_t autoencoder_out_num_elems = get_num_elems(autoencoder_out_type);
 
-    xnnpack_options.flags |= TFLITE_XNNPACK_DELEGATE_FLAG_QS8;
-    xnnpack_options.flags |= TFLITE_XNNPACK_DELEGATE_FLAG_QU8;
-    xnnpack_options.flags |= TFLITE_XNNPACK_DELEGATE_FLAG_DYNAMIC_FULLY_CONNECTED;
-    xnnpack_options.flags |= TFLITE_XNNPACK_DELEGATE_FLAG_ENABLE_SUBGRAPH_RESHAPING;
-    xnnpack_options.flags |= TFLITE_XNNPACK_DELEGATE_FLAG_ENABLE_LATEST_OPERATORS;
-    xnnpack_options.flags |= TFLITE_XNNPACK_DELEGATE_FLAG_VARIABLE_OPERATORS;
-
-    // XNNPack delegate options for the T5 and DiT models
-    std::unique_ptr<TfLiteDelegate, TfLiteDelegateDeleter> xnnpack_delegate_fp32(TfLiteXNNPackDelegateCreate(&xnnpack_options));
-
-    // XNNPack delegate options for the autoencoder model.
-    // We force the FP16 computation just to the most computatioannly expensive model
-    xnnpack_options.flags |= TFLITE_XNNPACK_DELEGATE_FLAG_FORCE_FP16;
-    std::unique_ptr<TfLiteDelegate, TfLiteDelegateDeleter> xnnpack_delegate_fp16(TfLiteXNNPackDelegateCreate(&xnnpack_options));
-
-    // Add the delegate to the interpreter
-    if (t5_interpreter->ModifyGraphWithDelegate(xnnpack_delegate_fp32.get()) != kTfLiteOk) {
-        AUDIOGEN_CHECK(false && "Failed to apply XNNPACK delegate");
-    }
-
-    if (dit_interpreter->ModifyGraphWithDelegate(xnnpack_delegate_fp32.get()) != kTfLiteOk) {
-        AUDIOGEN_CHECK(false && "Failed to apply XNNPACK delegate");
-    }
-
-    if (autoencoder_interpreter->ModifyGraphWithDelegate(xnnpack_delegate_fp16.get()) != kTfLiteOk) {
-        AUDIOGEN_CHECK(false && "Failed to apply XNNPACK delegate");
-    }
-
-    // ----- Allocate the tensors
-    // ----------------------------------
-    AUDIOGEN_CHECK(t5_interpreter->AllocateTensors() == kTfLiteOk);
-    AUDIOGEN_CHECK(dit_interpreter->AllocateTensors() == kTfLiteOk);
-    AUDIOGEN_CHECK(autoencoder_interpreter->AllocateTensors() == kTfLiteOk);
-
-    // ----- Get the input & output tensors pointers
-    // ----------------------------------
-    const size_t t5_ids_in_id = t5_interpreter->inputs()[k_t5_ids_in_idx];
-    const size_t t5_attnmask_in_id = t5_interpreter->inputs()[k_t5_attnmask_in_idx];
-    const size_t t5_time_in_id = t5_interpreter->inputs()[k_t5_audio_len_in_idx];
-
-    const size_t t5_crossattn_out_id = t5_interpreter->outputs()[k_t5_crossattn_out_idx];
-    const size_t t5_globalcond_out_id = t5_interpreter->outputs()[k_t5_globalcond_out_idx];
-
-    const size_t dit_x_in_id = dit_interpreter->inputs()[k_dit_x_in_idx];
-    const size_t dit_t_in_id = dit_interpreter->inputs()[k_dit_t_in_idx];
-    const size_t dit_crossattn_in_id = dit_interpreter->inputs()[k_dit_crossattn_in_idx];
-    const size_t dit_globalcond_in_id = dit_interpreter->inputs()[k_dit_globalcond_in_idx];
-    const size_t dit_out_id = dit_interpreter->outputs()[k_dit_out_idx];
-
-    const size_t autoencoder_in_id = autoencoder_interpreter->inputs()[0];
-    const size_t autoencoder_out_id = autoencoder_interpreter->outputs()[0];
-
-    int64_t* t5_ids_in_data = t5_interpreter->typed_tensor<int64_t>(t5_ids_in_id);
-    int64_t* t5_attnmask_in_data = t5_interpreter->typed_tensor<int64_t>(t5_attnmask_in_id);
-    float* t5_time_in_data = t5_interpreter->typed_tensor<float>(t5_time_in_id);
-    float* t5_crossattn_out_data = t5_interpreter->typed_tensor<float>(t5_crossattn_out_id);
-    float* t5_globalcond_out_data = t5_interpreter->typed_tensor<float>(t5_globalcond_out_id);
-
-    float* dit_x_in_data = dit_interpreter->typed_tensor<float>(dit_x_in_id);
-    float* dit_t_in_data = dit_interpreter->typed_tensor<float>(dit_t_in_id);
-    float* dit_crossattn_in_data = dit_interpreter->typed_tensor<float>(dit_crossattn_in_id);
-    float* dit_globalcond_in_data = dit_interpreter->typed_tensor<float>(dit_globalcond_in_id);
-    float* dit_out_data = dit_interpreter->typed_tensor<float>(dit_out_id);
-    float* autoencoder_in_data = autoencoder_interpreter->typed_tensor<float>(autoencoder_in_id);
-    float* autoencoder_out_data = autoencoder_interpreter->typed_tensor<float>(autoencoder_out_id);
-
-    // ----- Get the input & output tensors dimensions
-    // ----------------------------------
-    TfLiteIntArray* t5_ids_in_dims = t5_interpreter->tensor(t5_ids_in_id)->dims;
-    TfLiteIntArray* t5_attnmask_in_dims = t5_interpreter->tensor(t5_attnmask_in_id)->dims;
-    TfLiteIntArray* t5_crossattn_out_dims = t5_interpreter->tensor(t5_crossattn_out_id)->dims;
-    TfLiteIntArray* t5_globalcond_out_dims = t5_interpreter->tensor(t5_globalcond_out_id)->dims;
-
-    TfLiteIntArray* dit_x_in_dims = dit_interpreter->tensor(dit_x_in_id)->dims;
-    TfLiteIntArray* dit_crossattn_in_dims = dit_interpreter->tensor(dit_crossattn_in_id)->dims;
-    TfLiteIntArray* dit_globalcond_in_dims = dit_interpreter->tensor(dit_globalcond_in_id)->dims;
-    TfLiteIntArray* autoencoder_in_dims = autoencoder_interpreter->tensor(autoencoder_in_id)->dims;
-    TfLiteIntArray* autoencoder_out_dims = autoencoder_interpreter->tensor(autoencoder_out_id)->dims;
+    AUDIOGEN_CHECK(t5_crossattn_num_elems == dit_crossattn_num_elems);
+    AUDIOGEN_CHECK(t5_globalcond_num_elems == dit_globalcond_num_elems);
+    AUDIOGEN_CHECK(dit_x_num_elems == autoencoder_in_num_elems);
+    AUDIOGEN_CHECK(dit_out_num_elems == dit_x_num_elems);
+    AUDIOGEN_CHECK(dit_t_num_elems >= 1);
+    AUDIOGEN_CHECK(t5_time_num_elems >= 1);
 
     // ----- Allocate the extra buffer to pre-compute the sigmas
     std::vector<float> t_buffer(num_steps + 1);
 
     // ----- Initialize the T and X buffers
+    {
+        auto dit_x_ptr = get_litert_value(dit_inputs[k_dit_x_in_idx].Lock(litert::TensorBuffer::LockMode::kWrite));
+        auto* dit_x_in_data = static_cast<float*>(dit_x_ptr);
+        fill_random_norm_dist(dit_x_in_data, dit_x_num_elems, seed);
 
-    // Fill x tensor with noise
-    const size_t dit_x_num_elems = get_num_elems(dit_x_in_dims);
-    fill_random_norm_dist(dit_x_in_data, dit_x_num_elems, seed);
-
-    if(!audio_input_path.empty()) {
-        for(int i = 0; i < dit_x_num_elems; ++i) {
-            dit_x_in_data[i] =  encoded_audio[i] * (1 - sigma_max) + dit_x_in_data[i] * sigma_max;
+        if(!audio_input_path.empty()) {
+            AUDIOGEN_CHECK(encoded_audio.size() == dit_x_num_elems);
+            for(size_t i = 0; i < dit_x_num_elems; ++i) {
+                dit_x_in_data[i] =
+                    encoded_audio[i] * (1 - sigma_max) +
+                    dit_x_in_data[i] * sigma_max;
+            }
         }
+        AUDIOGEN_CHECK(dit_inputs[k_dit_x_in_idx].Unlock());
     }
 
     float logsnr_max = k_logsnr_max;
@@ -618,71 +572,117 @@ int main(int32_t argc, char** argv) {
 
     // Convert the prompt to IDs
     std::vector<int32_t> ids = convert_prompt_to_ids(prompt, sentence_model_path);
+    AUDIOGEN_CHECK(ids.size() <= t5_ids_num_elems);
 
-    // Initialize the t5_ids_in_data
-    memset(t5_ids_in_data, 0, get_num_elems(t5_ids_in_dims) * sizeof(int64_t));
-
-    for(size_t i = 0; i < ids.size(); ++i) {
-        t5_ids_in_data[i] = ids[i];
+    // Initialize T5 inputs
+    {
+        auto t5_ids_ptr = get_litert_value(t5_inputs[k_t5_ids_in_idx].Lock(litert::TensorBuffer::LockMode::kWrite));
+        auto* t5_ids_in_data = static_cast<int64_t*>(t5_ids_ptr);
+        memset(t5_ids_in_data, 0, t5_ids_num_elems * sizeof(int64_t));
+        for(size_t i = 0; i < ids.size(); ++i) {
+            t5_ids_in_data[i] = ids[i];
+        }
+        AUDIOGEN_CHECK(t5_inputs[k_t5_ids_in_idx].Unlock());
     }
 
-    // Initialize the t5_attnmask_in_data
-    memset(t5_attnmask_in_data, 0, get_num_elems(t5_attnmask_in_dims) * sizeof(int64_t));
-    for(int i = 0; i < ids.size(); i++) {
-        t5_attnmask_in_data[i] = 1;
+    {
+        auto t5_attn_ptr = get_litert_value(t5_inputs[k_t5_attnmask_in_idx].Lock(litert::TensorBuffer::LockMode::kWrite));
+        auto* t5_attnmask_in_data = static_cast<int64_t*>(t5_attn_ptr);
+        memset(t5_attnmask_in_data, 0, t5_attnmask_num_elems * sizeof(int64_t));
+        for(size_t i = 0; i < ids.size(); i++) {
+            t5_attnmask_in_data[i] = 1;
+        }
+        AUDIOGEN_CHECK(t5_inputs[k_t5_attnmask_in_idx].Unlock());
     }
 
-    // Initialize the t5_time_in_data
-    memcpy(t5_time_in_data, &audio_len_sec, 1 * sizeof(float));
+    {
+        auto t5_time_ptr = get_litert_value(t5_inputs[k_t5_audio_len_in_idx].Lock(litert::TensorBuffer::LockMode::kWrite));
+        auto* t5_time_in_data = static_cast<float*>(t5_time_ptr);
+        memset(t5_time_in_data, 0, t5_time_num_elems * sizeof(float));
+        memcpy(t5_time_in_data, &audio_len_sec, sizeof(float));
+        AUDIOGEN_CHECK(t5_inputs[k_t5_audio_len_in_idx].Unlock());
+    }
 
     auto start_t5 = time_in_ms();
-
-    // Run T5
-    AUDIOGEN_CHECK(t5_interpreter->Invoke() == kTfLiteOk);
-
+    AUDIOGEN_CHECK(t5_model.Run(t5_inputs, t5_outputs));
     auto end_t5 = time_in_ms();
 
-    // Since the crossattn and global conditioner are constants, we can initialize these 2 inputs
-    // of DiT outside the diffusion for loop
-    memcpy(dit_crossattn_in_data, t5_crossattn_out_data, get_num_elems(dit_crossattn_in_dims) * sizeof(float));
-    memcpy(dit_globalcond_in_data, t5_globalcond_out_data, get_num_elems(dit_globalcond_in_dims) * sizeof(float));
+    // Copy T5 outputs to DiT inputs (constants for diffusion loop)
+    {
+        auto t5_cross_ptr = get_litert_value(t5_outputs[k_t5_crossattn_out_idx].Lock(litert::TensorBuffer::LockMode::kRead));
+        auto dit_cross_ptr = get_litert_value(dit_inputs[k_dit_crossattn_in_idx].Lock(litert::TensorBuffer::LockMode::kWrite));
+        memcpy(dit_cross_ptr, t5_cross_ptr, t5_crossattn_num_elems * sizeof(float));
+        AUDIOGEN_CHECK(dit_inputs[k_dit_crossattn_in_idx].Unlock());
+        AUDIOGEN_CHECK(t5_outputs[k_t5_crossattn_out_idx].Unlock());
+    }
+
+    {
+        auto t5_global_ptr = get_litert_value(t5_outputs[k_t5_globalcond_out_idx].Lock(litert::TensorBuffer::LockMode::kRead));
+        auto dit_global_ptr = get_litert_value(dit_inputs[k_dit_globalcond_in_idx].Lock(litert::TensorBuffer::LockMode::kWrite));
+        memcpy(dit_global_ptr, t5_global_ptr, t5_globalcond_num_elems * sizeof(float));
+        AUDIOGEN_CHECK(dit_inputs[k_dit_globalcond_in_idx].Unlock());
+        AUDIOGEN_CHECK(t5_outputs[k_t5_globalcond_out_idx].Unlock());
+    }
 
     auto start_dit = time_in_ms();
 
     for(size_t i = 0; i < num_steps; ++i) {
         const float curr_t = t_buffer[i];
         const float next_t = t_buffer[i + 1];
-        memcpy(dit_t_in_data, &curr_t, 1 * sizeof(float));
+        {
+            auto dit_t_ptr = get_litert_value(dit_inputs[k_dit_t_in_idx].Lock(litert::TensorBuffer::LockMode::kWrite));
+            auto* dit_t_in_data = static_cast<float*>(dit_t_ptr);
+            memcpy(dit_t_in_data, &curr_t, sizeof(float));
+            AUDIOGEN_CHECK(dit_inputs[k_dit_t_in_idx].Unlock());
+        }
 
         // Run DiT
-        AUDIOGEN_CHECK(dit_interpreter->Invoke() == kTfLiteOk);
+        AUDIOGEN_CHECK(dit_model.Run(dit_inputs, dit_outputs));
 
-        // The output of DiT is combined with the current x and t tensors to
-        // generate the next x tensor for DiT
-        sampler_ping_pong(dit_out_data, dit_x_in_data, get_num_elems(dit_x_in_dims), curr_t, next_t, i, seed + i + 4564);
+        // Update x for next step
+        auto dit_out_ptr = get_litert_value(dit_outputs[k_dit_out_idx].Lock(litert::TensorBuffer::LockMode::kReadWrite));
+        auto dit_x_ptr = get_litert_value(dit_inputs[k_dit_x_in_idx].Lock(litert::TensorBuffer::LockMode::kReadWrite));
+        auto* dit_out_data = static_cast<float*>(dit_out_ptr);
+        auto* dit_x_in_data = static_cast<float*>(dit_x_ptr);
+
+        sampler_ping_pong(dit_out_data, dit_x_in_data, dit_x_num_elems, curr_t, next_t, i, seed + i + 4564);
+
+        AUDIOGEN_CHECK(dit_inputs[k_dit_x_in_idx].Unlock());
+        AUDIOGEN_CHECK(dit_outputs[k_dit_out_idx].Unlock());
     }
     auto end_dit = time_in_ms();
 
     auto start_autoencoder = time_in_ms();
 
-    // Initialize the autoencoder's input
-    memcpy(autoencoder_in_data, dit_x_in_data, get_num_elems(dit_x_in_dims) * sizeof(float));
+    // Initialize the autoencoder's input from DiT x
+    {
+        auto dit_x_ptr = get_litert_value(dit_inputs[k_dit_x_in_idx].Lock(litert::TensorBuffer::LockMode::kRead));
+        auto auto_in_ptr = get_litert_value(autoencoder_inputs[0].Lock(litert::TensorBuffer::LockMode::kWrite));
+        memcpy(auto_in_ptr, dit_x_ptr, dit_x_num_elems * sizeof(float));
+        AUDIOGEN_CHECK(autoencoder_inputs[0].Unlock());
+        AUDIOGEN_CHECK(dit_inputs[k_dit_x_in_idx].Unlock());
+    }
 
     // Run AutoEncoder
-    AUDIOGEN_CHECK(autoencoder_interpreter->Invoke() == kTfLiteOk);
+    AUDIOGEN_CHECK(autoencoder_model.Run(autoencoder_inputs, autoencoder_outputs));
 
     auto end_autoencoder = time_in_ms();
 
-    const size_t num_audio_samples = get_num_elems(autoencoder_out_dims) / 2;
-    const float* left_ch = autoencoder_out_data;
-    const float* right_ch = autoencoder_out_data + num_audio_samples;
+    const size_t num_audio_samples = autoencoder_out_num_elems / 2;
 
     // If output filename empty -> filename = <prompt>_<seed>.wav
     if (output_file.empty()) {
         output_file = get_filename(prompt, seed);
     }
 
-    save_as_wav(output_file.c_str(), left_ch, right_ch, num_audio_samples);
+    {
+        auto auto_out_ptr = get_litert_value(autoencoder_outputs[0].Lock(litert::TensorBuffer::LockMode::kRead));
+        const float* autoencoder_out_data = static_cast<const float*>(auto_out_ptr);
+        const float* left_ch = autoencoder_out_data;
+        const float* right_ch = autoencoder_out_data + num_audio_samples;
+        save_as_wav(output_file.c_str(), left_ch, right_ch, num_audio_samples);
+        AUDIOGEN_CHECK(autoencoder_outputs[0].Unlock());
+    }
 
     // Save the file
     auto t5_exec_time          = (end_t5 - start_t5);
