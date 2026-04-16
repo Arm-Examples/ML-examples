@@ -486,7 +486,7 @@ int main(int32_t argc, char** argv) {
     // ----------------------------------
     auto t5_options = create_cpu_options(num_threads, k_xnnpack_flags_base);
     auto dit_options = create_cpu_options(num_threads, k_xnnpack_flags_base);
-    auto autoencoder_options = create_cpu_options(num_threads, k_xnnpack_flags_base | TFLITE_XNNPACK_DELEGATE_FLAG_FORCE_FP16);
+    auto autoencoder_options = create_cpu_options(num_threads, k_xnnpack_flags_base);
 
     auto t5_model = get_litert_value(litert::CompiledModel::Create(env, t5_tflite, t5_options));
     auto dit_model = get_litert_value(litert::CompiledModel::Create(env, dit_tflite, dit_options));

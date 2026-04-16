@@ -101,12 +101,12 @@ export NDK_PATH=$(pwd)/android-ndk-r27c
 Build the audiogen application from the `app` directory using CMake:
 
 ```bash
-CMAKE_BUILD_PARALLEL_LEVEL=4 cmake -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_TOOLCHAIN_FILE="$NDK_PATH/build/cmake/android.toolchain.cmake" -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-24 -S . -B build
+CMAKE_BUILD_PARALLEL_LEVEL=4 cmake -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_TOOLCHAIN_FILE="$NDK_PATH/build/cmake/android.toolchain.cmake" -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -S . -B build
 ```
 
 Then, build the application:
 ```bash
-cmake --build build -j
+cmake --build build --parallel 4
 ```
 #### Step 4
 At this point, you are ready to push the binaries to your Android™ device and run the audiogen application. To do so, use the `adb` tool to push all necessary files into `/data/local/tmp/app`
