@@ -10,6 +10,10 @@ Source code for machine learning tutorials and examples, see also [Arm's AI/ML d
 Explore the Corstone-300 with Cortex-M55 and Ethos-U55 NPU.
 * [Source code on GitHub](ethos-u-corstone-300/README.md)
 
+### Ethos-U NPU direct drive on Corstone-1000
+Home for direct-drive ML examples targeting the Arm® Corstone™-1000 reference platform with Arm® Cortex®-A320 and Arm® Ethos™-U85 on the FVP.
+* [Source code on GitHub](ethos-u-corstone-1000/README.md)
+
 ### KleidiAI examples
 Examples showing ways to use the KleidiAI library
  * [Source code on GitHub](kleidiai-examples/)

@@ -1,0 +1,51 @@
+{
+    "version": 4,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 23,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "project-defaults",
+            "hidden": true,
+            "binaryDir": "${sourceDir}/cmake-build-${presetName}",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": {
+                    "type": "STRING",
+                    "value": "Release"
+                },
+                "CMAKE_EXPORT_COMPILE_COMMANDS": {
+                    "type": "BOOL",
+                    "value": "TRUE"
+                }
+            }
+        },
+        {
+            "name": "local-dependencies",
+            "hidden": true,
+            "description": "Optional local source tree overrides.",
+            "cacheVariables": {
+                "MLEK_SOURCE_DIR": {
+                    "type": "PATH",
+                    "value": "$env{MLEK_SOURCE_DIR}"
+                },
+                "TENSORFLOW_LITE_DIR": {
+                    "type": "PATH",
+                    "value": "$env{TENSORFLOW_LITE_DIR}"
+                }
+            }
+        },
+        {
+            "name": "local-ethos-u-dependencies",
+            "hidden": true,
+            "description": "Optional local Ethos-U source tree overrides.",
+            "cacheVariables": {
+                "ETHOS_U_NPU_LINUX_STACK_DIR": {
+                    "type": "PATH",
+                    "value": "$env{ETHOS_U_NPU_LINUX_STACK_DIR}"
+                }
+            }
+        }
+    ]
+}

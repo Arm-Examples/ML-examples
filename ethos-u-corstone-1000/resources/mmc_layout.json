@@ -1,0 +1,17 @@
+{
+  "image_name": "corstone-1000-mmc.img",
+  "directories": {
+    "bin": "bin",
+    "lib": "lib",
+    "models": "models",
+    "inputs": "inputs",
+    "labels": "labels",
+    "outputs": "outputs",
+    "tests": "tests"
+  },
+  "mount_candidates": [
+    "/run/media/mmcblk0",
+    "/run/media/mmcblk1",
+    "/run/media/*"
+  ]
+}

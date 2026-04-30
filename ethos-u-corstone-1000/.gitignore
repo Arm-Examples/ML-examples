@@ -1,0 +1,7 @@
+cmake-build/
+cmake-build-*/
+__pycache__/
+*.bin
+*.img
+downloads/
+*.log

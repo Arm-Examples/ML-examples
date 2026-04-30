@@ -1,0 +1,44 @@
+#----------------------------------------------------------------------------
+#  SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its
+#  affiliates <open-source-office@arm.com>
+#  SPDX-License-Identifier: Apache-2.0
+#
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
+#----------------------------------------------------------------------------
+add_library(direct_drive_image_classification_app STATIC
+    ImageClassificationApp.cpp)
+
+target_link_libraries(direct_drive_image_classification_app PUBLIC
+    direct_drive_common
+    mlek::img_class_api)
+
+add_executable(direct-drive-image-classification
+    Main.cpp)
+
+target_link_libraries(direct-drive-image-classification PRIVATE
+    direct_drive_image_classification_app)
+
+if (ETHOS_U_NPU_ENABLED AND TARGET ethosu_op_delegate)
+    add_dependencies(direct-drive-image-classification ethosu_op_delegate)
+endif()
+
+direct_drive_set_use_case_metadata(
+    USE_CASE image_classification
+    TARGET direct-drive-image-classification
+    MODELS "${DOWNLOADS_DIR_ABS}/img_class/*.tflite"
+    INPUTS
+        "${DOWNLOADS_DIR_ABS}/img_class/test-inputs/*.bin"
+        "${DOWNLOADS_DIR_ABS}/img_class/samples/*.bmp"
+    LABELS
+        "${CMAKE_SOURCE_DIR}/app/tests/use_case/image_classification/fixtures/mobilenet_labels.txt"
+        "${DOWNLOADS_DIR_ABS}/img_class/labels/*.txt")
