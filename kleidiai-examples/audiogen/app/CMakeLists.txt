@@ -30,6 +30,8 @@ endif()
 
 # Disable GPU support before adding the LiteRT subdirectory.
 set(LITERT_ENABLE_GPU OFF CACHE BOOL "Disable LiteRT GPU support")
+set(XNNPACK_ENABLE_ARM_SME ON CACHE BOOL "Enable XNNPACK ARM SME kernels" FORCE)
+set(XNNPACK_ENABLE_ARM_SME2 ON CACHE BOOL "Enable XNNPACK ARM SME2 kernels" FORCE)
 
 set(LITERT_SOURCE_DIR "${litert_SOURCE_DIR}")
 set(LITERT_BUILD_DIR  "${CMAKE_CURRENT_BINARY_DIR}/litert_build")
@@ -90,10 +92,9 @@ target_link_libraries(audiogen
     absl::string_view
     absl::span
     absl::status
-    absl::statusor
 
     ${LITERT_LIBS}
-    tensorflow-lite
+
     sentencepiece-static
 
     ${LINK_GROUP_END}
