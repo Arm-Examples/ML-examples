@@ -151,6 +151,12 @@ static size_t get_num_elems(const litert::RankedTensorType& type) {
     return get_litert_value(type.Layout().NumElements());
 }
 
+template <typename T>
+static std::pair<litert::TensorBufferScopedLock, T*> scoped_lock(litert::TensorBuffer& buffer,
+                                                                 litert::TensorBuffer::LockMode mode) {
+    return get_litert_value(litert::TensorBufferScopedLock::Create<T>(buffer, mode));
+}
+
 static litert::Options create_cpu_options(size_t num_threads, uint32_t xnnpack_flags) {
     auto options = get_litert_value(litert::Options::Create());
     AUDIOGEN_CHECK(options.SetHardwareAccelerators(litert::HwAccelerators::kCpu));
@@ -310,10 +316,10 @@ static void encode_audio(const std::string& audio_input_path, const std::string&
 
     // Pack the data
     {
-        auto encoder_in_ptr = get_litert_value(encoder_inputs[0].Lock(litert::TensorBuffer::LockMode::kWrite));
-        auto* autoencoder_encoder_in_data = static_cast<float*>(encoder_in_ptr);
+        auto encoder_in_lock_and_ptr = scoped_lock<float>(encoder_inputs[0],
+                                                          litert::TensorBuffer::LockMode::kWrite);
+        auto* autoencoder_encoder_in_data = encoder_in_lock_and_ptr.second;
         prepare_encoder_input(left_ch_input, right_ch_input, autoencoder_encoder_in_data, audio_input_dim0);
-        AUDIOGEN_CHECK(encoder_inputs[0].Unlock());
     }
 
     // Run the encoder
@@ -324,11 +330,11 @@ static void encode_audio(const std::string& audio_input_path, const std::string&
     // Copy the output to the output buffer
     const size_t encoder_output_num_elems = get_num_elems(encoder_out_type);
     {
-        auto encoder_out_ptr = get_litert_value(encoder_outputs[0].Lock(litert::TensorBuffer::LockMode::kRead));
-        auto* autoencoder_encoder_out_data = static_cast<float*>(encoder_out_ptr);
+        auto encoder_out_lock_and_ptr = scoped_lock<const float>(encoder_outputs[0],
+                                                                 litert::TensorBuffer::LockMode::kRead);
+        const auto* autoencoder_encoder_out_data = encoder_out_lock_and_ptr.second;
         encoded_audio.resize(encoder_output_num_elems);
         memcpy(encoded_audio.data(), autoencoder_encoder_out_data, encoder_output_num_elems * sizeof(float));
-        AUDIOGEN_CHECK(encoder_outputs[0].Unlock());
     }
 
     auto encoder_exec_time = (end_encoder - start_encoder);
@@ -547,8 +553,9 @@ int main(int32_t argc, char** argv) {
 
     // ----- Initialize the T and X buffers
     {
-        auto dit_x_ptr = get_litert_value(dit_inputs[k_dit_x_in_idx].Lock(litert::TensorBuffer::LockMode::kWrite));
-        auto* dit_x_in_data = static_cast<float*>(dit_x_ptr);
+        auto dit_x_lock_and_ptr = scoped_lock<float>(dit_inputs[k_dit_x_in_idx],
+                                                    litert::TensorBuffer::LockMode::kWrite);
+        auto* dit_x_in_data = dit_x_lock_and_ptr.second;
         fill_random_norm_dist(dit_x_in_data, dit_x_num_elems, seed);
 
         if(!audio_input_path.empty()) {
@@ -559,7 +566,6 @@ int main(int32_t argc, char** argv) {
                     dit_x_in_data[i] * sigma_max;
             }
         }
-        AUDIOGEN_CHECK(dit_inputs[k_dit_x_in_idx].Unlock());
     }
 
     float logsnr_max = k_logsnr_max;
@@ -575,53 +581,42 @@ int main(int32_t argc, char** argv) {
 
     // Initialize T5 inputs
     {
-        auto t5_ids_ptr = get_litert_value(t5_inputs[k_t5_ids_in_idx].Lock(litert::TensorBuffer::LockMode::kWrite));
-        auto* t5_ids_in_data = static_cast<int64_t*>(t5_ids_ptr);
+        auto t5_ids_lock_and_ptr = scoped_lock<int64_t>(t5_inputs[k_t5_ids_in_idx],
+                                                       litert::TensorBuffer::LockMode::kWrite);
+        auto* t5_ids_in_data = t5_ids_lock_and_ptr.second;
         memset(t5_ids_in_data, 0, t5_ids_num_elems * sizeof(int64_t));
         for(size_t i = 0; i < ids.size(); ++i) {
             t5_ids_in_data[i] = ids[i];
         }
-        AUDIOGEN_CHECK(t5_inputs[k_t5_ids_in_idx].Unlock());
     }
 
     {
-        auto t5_attn_ptr = get_litert_value(t5_inputs[k_t5_attnmask_in_idx].Lock(litert::TensorBuffer::LockMode::kWrite));
-        auto* t5_attnmask_in_data = static_cast<int64_t*>(t5_attn_ptr);
+        auto t5_attn_lock_and_ptr = scoped_lock<int64_t>(t5_inputs[k_t5_attnmask_in_idx],
+                                                        litert::TensorBuffer::LockMode::kWrite);
+        auto* t5_attnmask_in_data = t5_attn_lock_and_ptr.second;
         memset(t5_attnmask_in_data, 0, t5_attnmask_num_elems * sizeof(int64_t));
         for(size_t i = 0; i < ids.size(); i++) {
             t5_attnmask_in_data[i] = 1;
         }
-        AUDIOGEN_CHECK(t5_inputs[k_t5_attnmask_in_idx].Unlock());
     }
 
     {
-        auto t5_time_ptr = get_litert_value(t5_inputs[k_t5_audio_len_in_idx].Lock(litert::TensorBuffer::LockMode::kWrite));
-        auto* t5_time_in_data = static_cast<float*>(t5_time_ptr);
+        auto t5_time_lock_and_ptr = scoped_lock<float>(t5_inputs[k_t5_audio_len_in_idx],
+                                                      litert::TensorBuffer::LockMode::kWrite);
+        auto* t5_time_in_data = t5_time_lock_and_ptr.second;
         memset(t5_time_in_data, 0, t5_time_num_elems * sizeof(float));
         memcpy(t5_time_in_data, &audio_len_sec, sizeof(float));
-        AUDIOGEN_CHECK(t5_inputs[k_t5_audio_len_in_idx].Unlock());
     }
 
     auto start_t5 = time_in_ms();
     AUDIOGEN_CHECK(t5_model.Run(t5_inputs, t5_outputs));
     auto end_t5 = time_in_ms();
 
-    // Copy T5 outputs to DiT inputs (constants for diffusion loop)
-    {
-        auto t5_cross_ptr = get_litert_value(t5_outputs[k_t5_crossattn_out_idx].Lock(litert::TensorBuffer::LockMode::kRead));
-        auto dit_cross_ptr = get_litert_value(dit_inputs[k_dit_crossattn_in_idx].Lock(litert::TensorBuffer::LockMode::kWrite));
-        memcpy(dit_cross_ptr, t5_cross_ptr, t5_crossattn_num_elems * sizeof(float));
-        AUDIOGEN_CHECK(dit_inputs[k_dit_crossattn_in_idx].Unlock());
-        AUDIOGEN_CHECK(t5_outputs[k_t5_crossattn_out_idx].Unlock());
-    }
-
-    {
-        auto t5_global_ptr = get_litert_value(t5_outputs[k_t5_globalcond_out_idx].Lock(litert::TensorBuffer::LockMode::kRead));
-        auto dit_global_ptr = get_litert_value(dit_inputs[k_dit_globalcond_in_idx].Lock(litert::TensorBuffer::LockMode::kWrite));
-        memcpy(dit_global_ptr, t5_global_ptr, t5_globalcond_num_elems * sizeof(float));
-        AUDIOGEN_CHECK(dit_inputs[k_dit_globalcond_in_idx].Unlock());
-        AUDIOGEN_CHECK(t5_outputs[k_t5_globalcond_out_idx].Unlock());
-    }
+    // Reuse T5 outputs as DiT inputs without deep-copying TensorBuffer content.
+    dit_inputs[k_dit_crossattn_in_idx] =
+        get_litert_value(t5_outputs[k_t5_crossattn_out_idx].Duplicate());
+    dit_inputs[k_dit_globalcond_in_idx] =
+        get_litert_value(t5_outputs[k_t5_globalcond_out_idx].Duplicate());
 
     auto start_dit = time_in_ms();
 
@@ -629,25 +624,24 @@ int main(int32_t argc, char** argv) {
         const float curr_t = t_buffer[i];
         const float next_t = t_buffer[i + 1];
         {
-            auto dit_t_ptr = get_litert_value(dit_inputs[k_dit_t_in_idx].Lock(litert::TensorBuffer::LockMode::kWrite));
-            auto* dit_t_in_data = static_cast<float*>(dit_t_ptr);
+            auto dit_t_lock_and_ptr = scoped_lock<float>(dit_inputs[k_dit_t_in_idx],
+                                                        litert::TensorBuffer::LockMode::kWrite);
+            auto* dit_t_in_data = dit_t_lock_and_ptr.second;
             memcpy(dit_t_in_data, &curr_t, sizeof(float));
-            AUDIOGEN_CHECK(dit_inputs[k_dit_t_in_idx].Unlock());
         }
 
         // Run DiT
         AUDIOGEN_CHECK(dit_model.Run(dit_inputs, dit_outputs));
 
         // Update x for next step
-        auto dit_out_ptr = get_litert_value(dit_outputs[k_dit_out_idx].Lock(litert::TensorBuffer::LockMode::kReadWrite));
-        auto dit_x_ptr = get_litert_value(dit_inputs[k_dit_x_in_idx].Lock(litert::TensorBuffer::LockMode::kReadWrite));
-        auto* dit_out_data = static_cast<float*>(dit_out_ptr);
-        auto* dit_x_in_data = static_cast<float*>(dit_x_ptr);
+        auto dit_out_lock_and_ptr = scoped_lock<float>(dit_outputs[k_dit_out_idx],
+                                                      litert::TensorBuffer::LockMode::kReadWrite);
+        auto dit_x_lock_and_ptr = scoped_lock<float>(dit_inputs[k_dit_x_in_idx],
+                                                    litert::TensorBuffer::LockMode::kReadWrite);
+        auto* dit_out_data = dit_out_lock_and_ptr.second;
+        auto* dit_x_in_data = dit_x_lock_and_ptr.second;
 
         sampler_ping_pong(dit_out_data, dit_x_in_data, dit_x_num_elems, curr_t, next_t, i, seed + i + 4564);
-
-        AUDIOGEN_CHECK(dit_inputs[k_dit_x_in_idx].Unlock());
-        AUDIOGEN_CHECK(dit_outputs[k_dit_out_idx].Unlock());
     }
     auto end_dit = time_in_ms();
 
@@ -655,11 +649,13 @@ int main(int32_t argc, char** argv) {
 
     // Initialize the autoencoder's input from DiT x
     {
-        auto dit_x_ptr = get_litert_value(dit_inputs[k_dit_x_in_idx].Lock(litert::TensorBuffer::LockMode::kRead));
-        auto auto_in_ptr = get_litert_value(autoencoder_inputs[0].Lock(litert::TensorBuffer::LockMode::kWrite));
+        auto dit_x_lock_and_ptr = scoped_lock<const float>(dit_inputs[k_dit_x_in_idx],
+                                                          litert::TensorBuffer::LockMode::kRead);
+        auto auto_in_lock_and_ptr = scoped_lock<float>(autoencoder_inputs[0],
+                                                      litert::TensorBuffer::LockMode::kWrite);
+        const auto* dit_x_ptr = dit_x_lock_and_ptr.second;
+        auto* auto_in_ptr = auto_in_lock_and_ptr.second;
         memcpy(auto_in_ptr, dit_x_ptr, dit_x_num_elems * sizeof(float));
-        AUDIOGEN_CHECK(autoencoder_inputs[0].Unlock());
-        AUDIOGEN_CHECK(dit_inputs[k_dit_x_in_idx].Unlock());
     }
 
     // Run AutoEncoder
@@ -675,12 +671,12 @@ int main(int32_t argc, char** argv) {
     }
 
     {
-        auto auto_out_ptr = get_litert_value(autoencoder_outputs[0].Lock(litert::TensorBuffer::LockMode::kRead));
-        const float* autoencoder_out_data = static_cast<const float*>(auto_out_ptr);
+        auto auto_out_lock_and_ptr = scoped_lock<const float>(autoencoder_outputs[0],
+                                                             litert::TensorBuffer::LockMode::kRead);
+        const auto* autoencoder_out_data = auto_out_lock_and_ptr.second;
         const float* left_ch = autoencoder_out_data;
         const float* right_ch = autoencoder_out_data + num_audio_samples;
         save_as_wav(output_file.c_str(), left_ch, right_ch, num_audio_samples);
-        AUDIOGEN_CHECK(autoencoder_outputs[0].Unlock());
     }
 
     // Save the file
