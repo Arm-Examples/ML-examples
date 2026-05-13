@@ -1,5 +1,5 @@
 <!--
-    SPDX-FileCopyrightText: Copyright 2025 Arm Limited and/or its affiliates <open-source-office@arm.com>
+    SPDX-FileCopyrightText: Copyright 2025-2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
 
     SPDX-License-Identifier: Apache-2.0
 -->
@@ -8,8 +8,8 @@
 
 Welcome to the home of audio generation on Arm® CPUs, featuring Stable Audio Open Small with Arm® KleidiAI™. This project provides everything you need to:
 
-- Convert models to LiteRT-compatible formats
-- Run these models on Arm® CPUs using the LiteRT runtime, with support from XNNPack and Arm® KleidiAI™
+- Convert models to LiteRT formats using LiteRT Torch.
+- Run these models on Arm® CPUs using the LiteRT runtime, with support from XNNPACK and Arm® KleidiAI™.
 
 ## Prerequisites
 
