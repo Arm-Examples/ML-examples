@@ -58,9 +58,9 @@ constexpr size_t k_t5_crossattn_out_idx = 0;
 constexpr size_t k_t5_globalcond_out_idx = 2;
 
 constexpr size_t k_dit_crossattn_in_idx = 2;
-constexpr size_t k_dit_globalcond_in_idx = 1;
-constexpr size_t k_dit_x_in_idx = 3;
-constexpr size_t k_dit_t_in_idx = 0;
+constexpr size_t k_dit_globalcond_in_idx = 3;
+constexpr size_t k_dit_x_in_idx = 0;
+constexpr size_t k_dit_t_in_idx = 1;
 constexpr size_t k_dit_out_idx = 0;
 
 // -- Fill sigmas params
