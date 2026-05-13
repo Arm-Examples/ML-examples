@@ -1,114 +1,101 @@
 #
-# SPDX-FileCopyrightText: Copyright 2025 Arm Limited and/or its affiliates <open-source-office@arm.com>
+# SPDX-FileCopyrightText: Copyright 2025-2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
 #
 # SPDX-License-Identifier: Apache-2.0
 #
 
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.20)
 
-project(audiogen_runner)
-
-include(ExternalProject)
+project(audiogen_runner LANGUAGES C CXX)
 
 message(STATUS "CMAKE_SYSTEM_NAME: ${CMAKE_SYSTEM_NAME}")
 message(STATUS "CMAKE_HOST_SYSTEM_NAME: ${CMAKE_HOST_SYSTEM_NAME}")
 
 set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
-if(CMAKE_TOOLCHAIN_FILE)
-  list(APPEND TOOLCHAIN_CMAKE_ARGS -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE})
-endif()
+include(FetchContent)
 
-if(ANDROID_ABI)
-  list(APPEND TOOLCHAIN_CMAKE_ARGS -DANDROID_ABI=${ANDROID_ABI})
-endif()
-
-if(NOT TF_SRC_PATH)
-  include(FetchContent)
-
-  FetchContent_Declare(
-    tensorflow_src
-    GIT_REPOSITORY https://github.com/tensorflow/tensorflow.git
-    GIT_TAG 5baea41aa158ce6c3396726bd84fda5cd81737a0
-  )
-
-  FetchContent_MakeAvailable(tensorflow_src)
-
-  set(TENSORFLOW_SOURCE_DIR ${tensorflow_src_SOURCE_DIR} CACHE STRING "" FORCE)
-
-else()
-  set(TENSORFLOW_SOURCE_DIR ${TF_SRC_PATH} CACHE STRING "" FORCE)
-endif()
-
-set(FLATBUFFERS_SOURCE_DIR ${TENSORFLOW_SOURCE_DIR}/tensorflow/lite/tools/cmake/native_tools/flatbuffers)
-set(FLATBUFFERS_BIN_DIR ${CMAKE_BINARY_DIR}/flatbuffers-host-bin)
-set(SENTENCEPIECE_SOURCE_DIR ${CMAKE_BINARY_DIR}/sentencepiece)
-
-# Step 1: Build flatc ---
-ExternalProject_Add(
-  flatc_build
-  PREFIX flatc
-  DOWNLOAD_COMMAND ""
-  SOURCE_DIR ${FLATBUFFERS_SOURCE_DIR}
-  BINARY_DIR ${FLATBUFFERS_BIN_DIR}
-  INSTALL_COMMAND ""
+FetchContent_Declare(
+  litert
+  GIT_REPOSITORY https://github.com/google-ai-edge/LiteRT.git
+  GIT_TAG        c3eb2c5884c099206487d717e1782ba512ef2871
 )
 
-# Step 2: Build SentencePiece ---
-ExternalProject_Add(
-  sentencepiece_src
-  GIT_REPOSITORY https://github.com/google/sentencepiece.git
-  GIT_TAG        v0.2.0
-  SOURCE_DIR ${SENTENCEPIECE_SOURCE_DIR}
-  CMAKE_ARGS
-    -DCMAKE_POLICY_VERSION_MINIMUM=3.5
-    ${TOOLCHAIN_CMAKE_ARGS}
-  INSTALL_COMMAND ""
-)
+FetchContent_GetProperties(litert)
+if(NOT litert_POPULATED)
+  FetchContent_Populate(litert)
+endif()
 
-#Get the path to the sentencepiece lib
-ExternalProject_Get_Property(sentencepiece_src BINARY_DIR)
-set(SENTENCEPIECE_LIB ${BINARY_DIR}/src/libsentencepiece.a)
+# Disable GPU support before adding the LiteRT subdirectory.
+set(LITERT_ENABLE_GPU OFF CACHE BOOL "Disable LiteRT GPU support")
+set(XNNPACK_ENABLE_ARM_SME ON CACHE BOOL "Enable XNNPACK ARM SME kernels" FORCE)
+set(XNNPACK_ENABLE_ARM_SME2 ON CACHE BOOL "Enable XNNPACK ARM SME2 kernels" FORCE)
 
-## Step 4: Build the audiogen app ---
-# Define source
-set(SRCS audiogen.cpp)
+set(LITERT_SOURCE_DIR "${litert_SOURCE_DIR}")
+set(LITERT_BUILD_DIR  "${CMAKE_CURRENT_BINARY_DIR}/litert_build")
 
-add_executable(audiogen ${SRCS})
-
-set(XNNPACK_ENABLE_ARM_SME2 ON CACHE BOOL "" FORCE)
-set(TFLITE_HOST_TOOLS_DIR "${FLATBUFFERS_BIN_DIR}/_deps/flatbuffers-build" CACHE PATH "Host tools directory")
-
-# Because flatc is not available at configure time,
-# this workaround places a placeholder (an empty file called flatc) at the expected install location.
-file(WRITE ${FLATBUFFERS_BIN_DIR}/_deps/flatbuffers-build/flatc "")
-
-# LiteRT CMake configure stage
 add_subdirectory(
-  "${TENSORFLOW_SOURCE_DIR}/tensorflow/lite"
-  "${CMAKE_CURRENT_BINARY_DIR}/tensorflow-lite"
+  "${LITERT_SOURCE_DIR}/litert"
+  "${LITERT_BUILD_DIR}"
   EXCLUDE_FROM_ALL
 )
 
-# Delete the placeholder flatc file after the LiteRT CMake configuration stage is complete.
-file(REMOVE ${FLATBUFFERS_BIN_DIR}/_deps/flatbuffers-build/flatc "")
-
-add_dependencies(tensorflow-lite flatc_build)
-
-
-# Include headers
-target_include_directories(audiogen PRIVATE
-  ${TENSORFLOW_SOURCE_DIR}/tensorflow/lite
-  ${SENTENCEPIECE_SOURCE_DIR}/src
+FetchContent_Declare(
+  sentencepiece
+  GIT_REPOSITORY https://github.com/google/sentencepiece.git
+  GIT_TAG        v0.2.0
 )
 
-# Link with dependencies
+FetchContent_MakeAvailable(sentencepiece)
+
+add_executable(audiogen
+  audiogen.cpp
+)
+
+target_include_directories(audiogen
+  PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_BINARY_DIR}/include
+    ${sentencepiece_SOURCE_DIR}/src
+)
+
+set(LITERT_LIBS
+  litert_c_api
+  litert_cc_api
+  litert_cc_internal
+  litert_cc_options
+  litert_compiler_plugin
+  litert_core
+  litert_core_model
+  litert_runtime
+)
+
+set(LINK_GROUP_START "")
+set(LINK_GROUP_END "")
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT APPLE)
+  set(LINK_GROUP_START "-Wl,--start-group")
+  set(LINK_GROUP_END   "-Wl,--end-group")
+endif()
+
 target_link_libraries(audiogen
-  tensorflow-lite
-  ${SENTENCEPIECE_LIB}
+  PRIVATE
+    ${LINK_GROUP_START}
+
+    absl::die_if_null
+    absl::flags
+    absl::flags_parse
+    absl::log
+    absl::log_internal_check_op
+    absl::log_internal_message
+    absl::string_view
+    absl::span
+    absl::status
+
+    ${LITERT_LIBS}
+
+    sentencepiece-static
+
+    ${LINK_GROUP_END}
 )
-
-# Ensure dependency build order
-add_dependencies(audiogen flatc_build sentencepiece_src)
-
-
