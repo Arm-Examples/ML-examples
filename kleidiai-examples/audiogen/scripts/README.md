@@ -68,7 +68,7 @@ quant_config_int8 = quant_config.QuantConfig(
     )
 )
 # Initiate the conversion
-edge_model = ai_edge_torch.convert(
+edge_model = litert_torch.convert(
     model, example_inputs, quant_config=quant_config_int8
 )
 ```
