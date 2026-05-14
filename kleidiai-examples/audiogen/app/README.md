@@ -4,7 +4,7 @@
     SPDX-License-Identifier: Apache-2.0
 -->
 
-# Building and Running the Audio Generation Application on Arm® CPUs with the Stable Audio Open Small Model
+# Building and Running the Audio Generation Application on Arm® CPUs with the Stable Audio Open Small Model and the LiteRT runtime
 
 ## Dependencies
 - A host laptop/PC with a Linux®-based operating system (tested on Ubuntu® 20.04.4 LTS with x86_64) or with macOS®.
@@ -15,7 +15,13 @@
 
 ## Goal
 
-This guide will show you how to build the <strong>audio generation (audiogen)</strong> app contained in the single <strong>audiogen.cpp</strong> file. Instructions in this guide are provided for running the audiogen app either on an Android™ device or on a reasonably modern platform with macOS®.
+This guide will show you how to build the <strong>audio generation (audiogen)</strong> app contained in the single <strong>audiogen.cpp</strong> file. Instructions in this guide are provided for running the audiogen app either on an Android™ device or on a reasonably modern platform with macOS® using the LiteRT runtime.
+
+## LiteRT runtime
+
+[LiteRT](https://ai.google.dev/edge/litert/overview) is Google's on-device framework for high-performance ML & GenAI deployment on edge platforms.
+
+The latest LiteRT release introduces the `CompiledModel` API, a modern runtime interface designed to maximize hardware acceleration, which is the recommended choice for developers seeking state-of-the-art performance in on-device AI applications.
 
 ## Building the Audio Generation App
 
@@ -161,7 +167,7 @@ If everything runs successfully, the generated audio will be saved in `.wav` for
 ```bash
 adb pull data/local/tmp/warm_arpeggios_on_house_beats_120bpm_with_drums_effect_99.wav
 ```
-## Using audio input 
+## Using audio input
 You can pair your text prompt with an audio input to guide the model to your output goals.
 
 Change the style, genre and mood to create variations.
