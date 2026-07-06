@@ -1,0 +1,102 @@
+[
+  {
+    "name": "img_class",
+    "url_prefix": [
+      "https://github.com/ARM-software/ML-zoo/raw/e0aa361b03c738047b9147d1a50e3f2dcb13dbcb/models/image_classification/mobilenet_v2_1.0_224/tflite_int8/",
+      "https://gitlab.arm.com/artificial-intelligence/ethos-u/ml-embedded-evaluation-kit/-/raw/57ae316b98c2590241c9e27867c9aa30f52f8d4f/resources/img_class/"
+    ],
+    "resources": [
+      {
+        "name": "mobilenet_v2_1.0_224_INT8.tflite",
+        "url": "{url_prefix:0}mobilenet_v2_1.0_224_INT8.tflite",
+        "sha256": "bd8d56b80557a5fca7acf14f61e5339285c02810f7d7afa714b9763fc4b86e95"
+      },
+      {
+        "name": "ifm0.npy",
+        "url": "{url_prefix:0}testing_input/tfl.quantize/0.npy",
+        "sha256": "454b7a6fea8ed14e236e831f1d77114a476a348fbbfab2dce5341d7e9e17cc64"
+      },
+      {
+        "name": "ofm0.npy",
+        "url": "{url_prefix:0}testing_output/MobilenetV2/Predictions/Reshape_11/0.npy",
+        "sha256": "f1b5d4fce5a6f8ddaf13352229cd862285f6cd0d48b17a7d11ec5881ba499ae7"
+      },
+      {
+        "name": "labels_mobilenet_v2_1.0_224.txt",
+        "url": "{url_prefix:1}labels/labels_mobilenet_v2_1.0_224.txt",
+        "sub_folder": "labels",
+        "sha256": "9b67e8dd5ecb3c003f864c8df2661c485ee38dd4e3b0d8a4af0bc36bd23b97d8"
+      },
+      {
+        "name": "cat.bmp",
+        "url": "{url_prefix:1}samples/cat.bmp",
+        "sub_folder": "samples",
+        "sha256": "30600df720ba8527cfbb3e412269d1fa3e4cec41e36f28d48aef90b4b097cf7f"
+      },
+      {
+        "name": "dog.bmp",
+        "url": "{url_prefix:1}samples/dog.bmp",
+        "sub_folder": "samples",
+        "sha256": "de46b7888b0bf8c415c7df4ea96903051167df8dbd8d569a32c4ca0944d9d514"
+      },
+      {
+        "name": "kimono.bmp",
+        "url": "{url_prefix:1}samples/kimono.bmp",
+        "sub_folder": "samples",
+        "sha256": "b4f8f4175d8b61a659983caa5e10883f7e3535a41da9382efcb10fd50783f8c5"
+      },
+      {
+        "name": "tiger.bmp",
+        "url": "{url_prefix:1}samples/tiger.bmp",
+        "sub_folder": "samples",
+        "sha256": "aa4304903a3cd4c049915639416f084cee7a24204d88d698b78f3d7821cf3bb4"
+      }
+    ],
+    "generated_resources": [
+      {
+        "name": "zero_224x224x3_u8.bin",
+        "sub_folder": "test-inputs",
+        "type": "zero_binary",
+        "size": 150528
+      }
+    ]
+  },
+  {
+    "name": "object_detection",
+    "url_prefix": [
+      "https://github.com/emza-vs/ModelZoo/raw/refs/tags/v1.0/object_detection/",
+      "https://gitlab.arm.com/artificial-intelligence/ethos-u/ml-embedded-evaluation-kit/-/raw/57ae316b98c2590241c9e27867c9aa30f52f8d4f/resources/object_detection/"
+    ],
+    "resources": [
+      {
+        "name": "yolo-fastest_192_face_v4.tflite",
+        "url": "{url_prefix:0}yolo-fastest_192_face_v4.tflite",
+        "sha256": "e94bcdb011784bead70ab0c0e9d2dae1a9ea5f103b43e1e6fac3019302cf71ab"
+      },
+      {
+        "name": "couple.bmp",
+        "url": "{url_prefix:1}samples/couple.bmp",
+        "sub_folder": "samples",
+        "sha256": "d99e02985a70f0f67a9461016a43e302582f00cab3fbd438a8aa101d5cd6ed3c"
+      },
+      {
+        "name": "glasses.bmp",
+        "url": "{url_prefix:1}samples/glasses.bmp",
+        "sub_folder": "samples",
+        "sha256": "4fe3d07318dc2f6d34c3a8ebb431989994cece18af5ff99bd076287444383293"
+      },
+      {
+        "name": "man_and_baby.bmp",
+        "url": "{url_prefix:1}samples/man_and_baby.bmp",
+        "sub_folder": "samples",
+        "sha256": "8039d72b2007349ae8b2c336b09437bc130e622d70a9a243ee11989ef147e4f3"
+      },
+      {
+        "name": "pitch_and_roll.bmp",
+        "url": "{url_prefix:1}samples/pitch_and_roll.bmp",
+        "sub_folder": "samples",
+        "sha256": "7739251899829ec756f8cfb0a835dae126458bfcbaba7a21cb12b8113558e616"
+      }
+    ]
+  }
+]

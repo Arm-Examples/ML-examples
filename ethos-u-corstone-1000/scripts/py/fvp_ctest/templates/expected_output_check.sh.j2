@@ -1,0 +1,29 @@
+# SPDX-FileCopyrightText: Copyright 2026 Arm Limited and/or its
+# affiliates <open-source-office@arm.com>
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Template fragment that reports whether one expected application output exists.
+
+# This fragment is included by run_ctest_one.sh.j2 for each expected
+# output file.
+
+{% macro expected_output_check(test_name, output_file) -%}
+if test -f {{ output_file | shell_quote }}; then
+  echo {{ ("APP_OUTPUT:" ~ test_name ~ ":" ~ output_file) | shell_quote }}
+else
+  echo {{ ("APP_MISSING_OUTPUT:" ~ test_name ~ ":" ~ output_file) | shell_quote }}
+  exit 126
+fi
+{%- endmacro %}

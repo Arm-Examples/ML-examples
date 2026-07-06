@@ -1,0 +1,26 @@
+{
+    "version": 4,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 23,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "native-toolchain",
+            "hidden": true,
+            "description": "Use the native host toolchain."
+        },
+        {
+            "name": "aarch64-toolchain",
+            "hidden": true,
+            "description": "Use the Bootlin AArch64 Linux toolchain from PATH.",
+            "cacheVariables": {
+                "CMAKE_TOOLCHAIN_FILE": {
+                    "type": "FILEPATH",
+                    "value": "${sourceDir}/scripts/cmake/toolchains/aarch64-bootlin-linux-musl.cmake"
+                }
+            }
+        }
+    ]
+}

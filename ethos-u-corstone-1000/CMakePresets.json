@@ -1,0 +1,116 @@
+{
+    "version": 6,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 25,
+        "patch": 0
+    },
+    "include": [
+        "scripts/cmake/presets/options-preset.json",
+        "scripts/cmake/presets/toolchains-preset.json"
+    ],
+    "configurePresets": [
+        {
+            "name": "native",
+            "displayName": "native",
+            "description": "Build the native host inference runner.",
+            "inherits": [
+                "project-defaults",
+                "local-dependencies",
+                "native-toolchain"
+            ],
+            "cacheVariables": {
+                "TARGET_PLATFORM": {
+                    "type": "STRING",
+                    "value": "native"
+                }
+            }
+        },
+        {
+            "name": "corstone-1000-aarch64",
+            "displayName": "corstone-1000-aarch64",
+            "description": "Build for Corstone-1000 with Cortex-A320 AArch64 Linux.",
+            "inherits": [
+                "project-defaults",
+                "local-dependencies",
+                "local-ethos-u-dependencies",
+                "aarch64-toolchain"
+            ],
+            "cacheVariables": {
+                "TARGET_PLATFORM": {
+                    "type": "STRING",
+                    "value": "corstone-1000-aarch64"
+                }
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "native",
+            "configurePreset": "native"
+        },
+        {
+            "name": "corstone-1000-aarch64",
+            "configurePreset": "corstone-1000-aarch64"
+        }
+    ],
+    "testPresets": [
+        {
+            "name": "native",
+            "configurePreset": "native",
+            "output": {
+                "outputOnFailure": true
+            }
+        },
+        {
+            "name": "corstone-1000-aarch64",
+            "configurePreset": "corstone-1000-aarch64",
+            "output": {
+                "outputOnFailure": true
+            },
+            "execution": {
+                "jobs": 1
+            }
+        }
+    ],
+    "workflowPresets": [
+        {
+            "name": "native",
+            "displayName": "native",
+            "description": "Configure, build, and test the native host targets.",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "native"
+                },
+                {
+                    "type": "build",
+                    "name": "native"
+                },
+                {
+                    "type": "test",
+                    "name": "native"
+                }
+            ]
+        },
+        {
+            "name": "corstone-1000-aarch64",
+            "displayName": "corstone-1000-aarch64",
+            "description": "Configure, build, package, and run the Corstone-1000 AArch64 FVP tests.",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "corstone-1000-aarch64"
+                },
+                {
+                    "type": "build",
+                    "name": "corstone-1000-aarch64"
+                },
+                {
+                    "type": "test",
+                    "name": "corstone-1000-aarch64"
+                }
+            ]
+        }
+    ]
+}
