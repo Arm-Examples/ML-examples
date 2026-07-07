@@ -17,8 +17,8 @@ You need:
 The model setup, project build, and MMC packaging steps do not require this
 Yocto Project workspace. The workspace is only needed when running the image.
 
-Create the workspace by following the latest Corstone-1000 build guide:
-https://corstone1000.docs.arm.com/en/latest/user-guide.html#build
+Create the workspace by following the Corstone-1000 build guide at tagged version `corstone1000-2025.12`:
+https://corstone1000.docs.arm.com/en/corstone1000-2025.12/user-guide.html#build
 
 The FVP helper defaults can be supplied with:
 
@@ -114,8 +114,8 @@ Boot, shell, FVP, secure-world, and secure-enclave output are kept in separate
 files under that `logs` directory. `Testing/FVP/<test>/combined.log` preserves
 all sections for deeper debugging.
 
-For a Yocto Project workspace, follow the latest Corstone-1000 build guide:
-https://corstone1000.docs.arm.com/en/latest/user-guide.html#build
+For a Yocto Project workspace, follow the Corstone-1000 build guide tagged at version `corstone1000-2025.12`:
+https://corstone1000.docs.arm.com/en/corstone1000-2025.12/user-guide.html#build
 
 Create and populate the project Python virtual environment before configuring
 or running FVP CTests:
