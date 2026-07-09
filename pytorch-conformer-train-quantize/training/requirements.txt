@@ -95,7 +95,7 @@ pexpect==4.9.0
 platformdirs==4.3.8
 prometheus_client==0.22.1
 prompt_toolkit==3.0.51
-protobuf==5.29.5
+protobuf==5.29.6
 psutil==7.0.0
 ptyprocess==0.7.0
 pure_eval==0.2.3
