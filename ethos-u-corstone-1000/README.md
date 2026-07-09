@@ -16,7 +16,8 @@ All builds require CMake 3.25 or newer.
 
 Before running these examples on the FVP, build the Corstone-1000 with
 Cortex-A320 FVP and full BSP by following the guidance at
-[corstone1000.docs.arm.com](https://corstone1000.docs.arm.com/).
+[corstone1000.docs.arm.com/en/corstone1000-2025.12](https://corstone1000.docs.arm.com/en/corstone1000-2025.12/).
+N.B. the `corstone1000-2025.12` tagged version of the project is currently required.
 
 For Corstone-1000 AArch64 builds, put the Bootlin AArch64 musl toolchain on
 `PATH`.
