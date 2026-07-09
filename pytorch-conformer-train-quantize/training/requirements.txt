@@ -21,7 +21,7 @@ defusedxml==0.7.1
 einops==0.3.2
 executing==2.2.0
 fastjsonschema==2.21.1
-filelock==3.18.0
+filelock==3.20.3
 flashlight-text==0.0.7
 flatbuffers==25.2.10
 fqdn==1.5.1
