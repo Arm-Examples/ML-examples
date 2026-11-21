@@ -170,7 +170,6 @@ static void read_wav(const std::string& path, std::vector<float>& left_ch, std::
     // You can use this command to convert the file to the expected format:
     // ffmpeg -i input_audio.mp3 -ar 44100 -ac 2 -c:a pcm_f32le -f wav output.wav
 
-    constexpr uint16_t wave_format_pcm        = 0x0001;
     constexpr uint16_t wave_format_ieee_float = 0x0003;
     constexpr uint16_t wave_format_extensible = 0xFFFE;
 
@@ -210,7 +209,19 @@ static void read_wav(const std::string& path, std::vector<float>& left_ch, std::
     input_stream.read(reinterpret_cast<char*>(&block_align), 2);
     input_stream.read(reinterpret_cast<char*>(&audio_bits_per_sample), 2);
 
-    if (!(audio_format == wave_format_ieee_float || audio_format == wave_format_pcm || audio_format == wave_format_extensible) ||
+    // In WAVE_FORMAT_EXTENSIBLE, the sample format is in the first two bytes of the SubFormat GUID
+    uint16_t sample_format = audio_format;
+    uint32_t fmt_ext_read = 0;
+    if (audio_format == wave_format_extensible) {
+        AUDIOGEN_CHECK(fmt_chunk_sz >= 40);
+        // Skip cbSize, wValidBitsPerSample and dwChannelMask
+        input_stream.seekg(8, std::ios::cur);
+        input_stream.read(reinterpret_cast<char*>(&sample_format), 2);
+        AUDIOGEN_CHECK(bool(input_stream));
+        fmt_ext_read = 10;
+    }
+
+    if (sample_format != wave_format_ieee_float ||
         audio_num_channels != k_audio_num_channels ||
         audio_sr != k_audio_sr ||
         audio_bits_per_sample != k_bits_per_sample) {
@@ -221,8 +232,8 @@ static void read_wav(const std::string& path, std::vector<float>& left_ch, std::
     }
 
     // Skip any extension bytes in the fmt chunk
-    if (fmt_chunk_sz > 16) {
-        input_stream.seekg(static_cast<std::streamoff>(fmt_chunk_sz - 16), std::ios::cur);
+    if (fmt_chunk_sz > 16 + fmt_ext_read) {
+        input_stream.seekg(static_cast<std::streamoff>(fmt_chunk_sz - 16 - fmt_ext_read), std::ios::cur);
         AUDIOGEN_CHECK(bool(input_stream));
     }
 
